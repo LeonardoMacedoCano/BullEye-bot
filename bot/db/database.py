@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-DATABASE_PATH = os.getenv("DATABASE_PATH", "/data/bot.db")
+DATABASE_PATH = os.getenv("DATABASE_PATH") or "/data/bot.db"
 
 
 def get_connection() -> sqlite3.Connection:
@@ -14,7 +14,9 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
+    db_dir = os.path.dirname(DATABASE_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     conn = get_connection()
     try:
         cursor = conn.cursor()

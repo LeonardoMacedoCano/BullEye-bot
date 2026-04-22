@@ -1,14 +1,13 @@
-version: "3.9"
-
 services:
   bulleyebot:
     container_name: BullEyeBot
-    build: .
+    build:
+      context: ${BULLEYEBOT_SOURCE_PATH:-.}
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - DATABASE_PATH=${DATABASE_PATH}
     volumes:
-      - ${BULLEYEBOT_DATA_PATH:-bot_data}:/data
+      - bot_data:/data
     restart: unless-stopped
 
 volumes:

@@ -98,7 +98,7 @@ A Discord bot for monitoring financial tickers. Track your portfolio and watchli
 ```
 DISCORD_TOKEN=your_discord_bot_token_here
 DATABASE_PATH=/data/bot.db
-BULLEYEBOT_DATA_PATH=/mnt/user/appdata/bulleyebot
+BULLEYEBOT_SOURCE_PATH=/path/to/BullEye-bot
 ```
 
 3. Build and start the bot:
@@ -127,9 +127,9 @@ docker-compose down
 |----------|----------|---------|-------------|
 | `DISCORD_TOKEN` | Yes | — | Your Discord bot token |
 | `DATABASE_PATH` | No | `/data/bot.db` | Path to the SQLite database file inside the container |
-| `BULLEYEBOT_DATA_PATH` | No | named volume `bot_data` | Host path mounted to `/data` in the container (e.g. `/opt/bulleyebot/data`) |
+| `BULLEYEBOT_SOURCE_PATH` | No | `.` (current directory) | Host path to the source code used as Docker build context |
 
-If `BULLEYEBOT_DATA_PATH` is set, the database is persisted at that host path. If omitted, a Docker named volume `bot_data` is used automatically.
+The database is always persisted in the `bot_data` Docker named volume.
 
 ---
 
