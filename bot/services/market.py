@@ -7,9 +7,9 @@ logger = logging.getLogger(__name__)
 def get_ticker_data(ticker: str) -> dict | None:
     try:
         t = yf.Ticker(ticker)
-        history = t.history(period="30d")
+        history = t.history(period="1mo")
         if history.empty:
-            logger.warning("No data returned for ticker: %s", ticker)
+            logger.warning("No data returned for ticker %s (empty history)", ticker)
             return None
         current_price = float(history["Close"].iloc[-1])
         high_30d = float(history["High"].max())

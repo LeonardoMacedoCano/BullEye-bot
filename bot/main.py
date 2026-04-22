@@ -4,6 +4,7 @@ import os
 import sys
 
 import discord
+from discord.errors import PrivilegedIntentsRequired
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -60,7 +61,15 @@ async def main() -> None:
             logger.info("Loaded cog: %s", cog)
 
         bot.loop.create_task(scheduler_loop(bot))
-        await bot.start(DISCORD_TOKEN)
+        try:
+            await bot.start(DISCORD_TOKEN)
+        except PrivilegedIntentsRequired:
+            logger.error(
+                "Message Content Intent is not enabled in the Discord Developer Portal. "
+                "Go to discord.com/developers/applications, select your bot, open the 'Bot' tab, "
+                "and enable 'Message Content Intent' under Privileged Gateway Intents."
+            )
+            sys.exit(1)
 
 
 if __name__ == "__main__":
