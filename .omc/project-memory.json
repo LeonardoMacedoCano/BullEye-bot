@@ -1,0 +1,122 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1776819488179,
+  "projectRoot": "/home/cano/ProjetoGit/BullEye-bot",
+  "techStack": {
+    "languages": [],
+    "frameworks": [],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {},
+  "hotPaths": [
+    {
+      "path": "README.md",
+      "accessCount": 6,
+      "lastAccessed": 1776821004930,
+      "type": "file"
+    },
+    {
+      "path": "docker-compose.yml",
+      "accessCount": 4,
+      "lastAccessed": 1776820667805,
+      "type": "file"
+    },
+    {
+      "path": "requirements.txt",
+      "accessCount": 1,
+      "lastAccessed": 1776819616028,
+      "type": "file"
+    },
+    {
+      "path": "bot/db/database.py",
+      "accessCount": 1,
+      "lastAccessed": 1776819620266,
+      "type": "file"
+    },
+    {
+      "path": "bot/services/fear_greed.py",
+      "accessCount": 1,
+      "lastAccessed": 1776819622037,
+      "type": "file"
+    },
+    {
+      "path": "bot/db/repository.py",
+      "accessCount": 1,
+      "lastAccessed": 1776819633310,
+      "type": "file"
+    },
+    {
+      "path": "bot/services/market.py",
+      "accessCount": 1,
+      "lastAccessed": 1776819635934,
+      "type": "file"
+    },
+    {
+      "path": "bot/commands/summary.py",
+      "accessCount": 1,
+      "lastAccessed": 1776819646102,
+      "type": "file"
+    },
+    {
+      "path": "bot/commands/ticker.py",
+      "accessCount": 1,
+      "lastAccessed": 1776819652703,
+      "type": "file"
+    },
+    {
+      "path": "bot/commands/alerts.py",
+      "accessCount": 1,
+      "lastAccessed": 1776819656471,
+      "type": "file"
+    },
+    {
+      "path": "bot/commands/schedule_cmd.py",
+      "accessCount": 1,
+      "lastAccessed": 1776819660893,
+      "type": "file"
+    },
+    {
+      "path": "bot/scheduler.py",
+      "accessCount": 1,
+      "lastAccessed": 1776819670027,
+      "type": "file"
+    },
+    {
+      "path": "bot/main.py",
+      "accessCount": 1,
+      "lastAccessed": 1776819675053,
+      "type": "file"
+    },
+    {
+      "path": "Dockerfile",
+      "accessCount": 1,
+      "lastAccessed": 1776819678934,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

@@ -1,0 +1,52 @@
+import os
+import sqlite3
+import logging
+
+logger = logging.getLogger(__name__)
+
+DATABASE_PATH = os.getenv("DATABASE_PATH", "/data/bot.db")
+
+
+def get_connection() -> sqlite3.Connection:
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db() -> None:
+    os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.executescript("""
+            CREATE TABLE IF NOT EXISTS users (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                discord_id TEXT    UNIQUE NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS tickers (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id   INTEGER NOT NULL REFERENCES users(id),
+                ticker    TEXT    NOT NULL,
+                category  TEXT    NOT NULL CHECK(category IN ('wallet', 'watchlist'))
+            );
+
+            CREATE TABLE IF NOT EXISTS alerts (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id      INTEGER NOT NULL REFERENCES users(id),
+                ticker       TEXT    NOT NULL,
+                target_price REAL    NOT NULL,
+                active       INTEGER NOT NULL DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS schedules (
+                id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+                time    TEXT    NOT NULL,
+                active  INTEGER NOT NULL DEFAULT 1
+            );
+        """)
+        conn.commit()
+        logger.info("Database initialized at %s", DATABASE_PATH)
+    finally:
+        conn.close()
