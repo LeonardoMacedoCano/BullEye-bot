@@ -1,0 +1,19 @@
+# Environment
+.env
+
+# oh-my-claudecode internal state
+.omc/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# Database
+*.db
+*.sqlite3
+
+# Docker
+.dockerignore
