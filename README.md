@@ -25,6 +25,8 @@ A Discord bot for monitoring financial tickers. Track your portfolio and watchli
 | `!list` | List all your tickers |
 | `!alert <TICKER> <PRICE>` | Alert when price <= target (fires once) |
 | `!schedule HH:MM` | Schedule a daily summary DM |
+| `!schedule` | Show your current schedule |
+| `!unschedule` | Cancel your daily summary |
 | `!resume` | Get your summary now |
 | `!help` | Show all commands |
 
@@ -90,3 +92,4 @@ docker-compose up -d
 | `PREFIX` | No | `!` | Command prefix |
 | `DATABASE_PATH` | No | `/data/bot.db` | Path to SQLite database inside the container |
 | `BULLEYEBOT_SOURCE_PATH` | No | `.` | Host path to source code for Docker build context |
+| `TIMEZONE` | No | `UTC` | Timezone for scheduled summaries (e.g. `America/Sao_Paulo`) |

@@ -2,7 +2,7 @@ import re
 import logging
 from discord.ext import commands
 
-from bot.db.repository import get_or_create_user, set_schedule, get_schedule
+from bot.db.repository import get_or_create_user, set_schedule, get_schedule, deactivate_schedule
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,21 @@ class ScheduleCog(commands.Cog):
         self.bot = bot
 
     @commands.command(name="schedule")
-    async def schedule(self, ctx: commands.Context, time: str) -> None:
+    async def schedule(self, ctx: commands.Context, time: str = None) -> None:
+        user = get_or_create_user(str(ctx.author.id))
+
+        if time is None:
+            row = get_schedule(user["id"])
+            if row:
+                await ctx.send(
+                    f"{ctx.author.mention} Your daily summary is scheduled at **{row['time']}**."
+                )
+            else:
+                await ctx.send(
+                    f"{ctx.author.mention} No schedule set. Use `!schedule HH:MM` to set one."
+                )
+            return
+
         match = _TIME_RE.match(time)
         if not match:
             await ctx.send(
@@ -29,13 +43,19 @@ class ScheduleCog(commands.Cog):
             )
             return
 
-        user = get_or_create_user(str(ctx.author.id))
         set_schedule(user["id"], time)
-        await ctx.send(
-            f"{ctx.author.mention} Daily summary scheduled at **{time}**. "
-            f"You will receive a DM every day at this time."
-        )
+        await ctx.send(f"{ctx.author.mention} Daily summary scheduled at **{time}**.")
         logger.info("User %s set daily schedule at %s", ctx.author.id, time)
+
+    @commands.command(name="unschedule")
+    async def unschedule(self, ctx: commands.Context) -> None:
+        user = get_or_create_user(str(ctx.author.id))
+        count = deactivate_schedule(user["id"])
+        if count == 0:
+            await ctx.send(f"{ctx.author.mention} You have no active schedule to cancel.")
+        else:
+            await ctx.send(f"{ctx.author.mention} Daily summary cancelled.")
+            logger.info("User %s cancelled their daily schedule", ctx.author.id)
 
 
 async def setup(bot: commands.Bot) -> None:

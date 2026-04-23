@@ -18,6 +18,8 @@ class HelpCog(commands.Cog):
             f"`{p}list` — List all your tickers",
             f"`{p}alert <TICKER> <PRICE>` — Alert when price reaches or drops below target (fires once)",
             f"`{p}schedule HH:MM` — Schedule a daily summary DM",
+            f"`{p}schedule` — Show your current schedule",
+            f"`{p}unschedule` — Cancel your daily summary",
             f"`{p}resume` — Get your current summary",
             f"`{p}help` — Show this message",
             "\n**Ticker tips:** Brazilian B3 stocks auto-format (`PETR4` → `PETR4.SA`). `BTC` auto-formats to `BTC-USD`.",

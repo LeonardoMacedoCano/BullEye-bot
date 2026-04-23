@@ -157,6 +157,19 @@ def get_schedule(user_id: int) -> sqlite3.Row | None:
         conn.close()
 
 
+def deactivate_schedule(user_id: int) -> int:
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE schedules SET active = 0 WHERE user_id = ? AND active = 1", (user_id,)
+        )
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()
+
+
 def get_all_active_schedules() -> list[sqlite3.Row]:
     conn = get_connection()
     try:
