@@ -49,6 +49,11 @@ def init_db() -> None:
             );
         """)
         conn.commit()
+        try:
+            conn.execute("ALTER TABLE tickers ADD COLUMN subcategory TEXT DEFAULT NULL")
+            conn.commit()
+        except Exception:
+            pass
         logger.info("Database initialized at %s", DATABASE_PATH)
     finally:
         conn.close()

@@ -1,0 +1,30 @@
+import logging
+from discord.ext import commands
+
+logger = logging.getLogger(__name__)
+
+
+class HelpCog(commands.Cog):
+    def __init__(self, bot: commands.Bot) -> None:
+        self.bot = bot
+
+    @commands.command(name="help")
+    async def help_cmd(self, ctx: commands.Context) -> None:
+        p = ctx.prefix
+        lines = [
+            f"{ctx.author.mention} **BullEyeBot — Commands**\n",
+            f"`{p}add <TICKER> [wallet|watchlist]` — Add a ticker (default: watchlist)",
+            f"`{p}remove <TICKER>` — Remove a ticker and its alerts",
+            f"`{p}list` — List all your tickers",
+            f"`{p}alert <TICKER> <PRICE>` — Alert when price reaches or drops below target (fires once)",
+            f"`{p}schedule HH:MM` — Schedule a daily summary DM",
+            f"`{p}resume` — Get your current summary",
+            f"`{p}help` — Show this message",
+            "\n**Ticker tips:** Brazilian B3 stocks auto-format (`PETR4` → `PETR4.SA`). `BTC` auto-formats to `BTC-USD`.",
+        ]
+        await ctx.send("\n".join(lines))
+        logger.info("Help sent to user %s", ctx.author.id)
+
+
+async def setup(bot: commands.Bot) -> None:
+    await bot.add_cog(HelpCog(bot))

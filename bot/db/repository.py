@@ -14,12 +14,12 @@ def get_or_create_user(discord_id: str) -> sqlite3.Row:
         conn.close()
 
 
-def add_ticker(user_id: int, ticker: str, category: str) -> None:
+def add_ticker(user_id: int, ticker: str, category: str, subcategory: str | None = None) -> None:
     conn = get_connection()
     try:
         conn.execute(
-            "INSERT INTO tickers (user_id, ticker, category) VALUES (?, ?, ?)",
-            (user_id, ticker.upper(), category),
+            "INSERT INTO tickers (user_id, ticker, category, subcategory) VALUES (?, ?, ?, ?)",
+            (user_id, ticker.upper(), category, subcategory),
         )
         conn.commit()
     finally:
@@ -52,6 +52,31 @@ def list_tickers(user_id: int) -> list[sqlite3.Row]:
             (user_id,),
         )
         return cursor.fetchall()
+    finally:
+        conn.close()
+
+
+def update_ticker_subcategory(user_id: int, ticker: str, subcategory: str | None) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE tickers SET subcategory = ? WHERE user_id = ? AND ticker = ?",
+            (subcategory, user_id, ticker.upper()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_ticker_category(user_id: int, ticker: str) -> str | None:
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            "SELECT category FROM tickers WHERE user_id = ? AND ticker = ?",
+            (user_id, ticker.upper()),
+        )
+        row = cursor.fetchone()
+        return row["category"] if row else None
     finally:
         conn.close()
 

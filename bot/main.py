@@ -24,17 +24,20 @@ if not DISCORD_TOKEN:
     logger.error("DISCORD_TOKEN environment variable is not set. Exiting.")
     sys.exit(1)
 
+PREFIX = os.getenv("PREFIX") or "!"
+
 COGS = [
     "bot.commands.ticker",
     "bot.commands.alerts",
     "bot.commands.schedule_cmd",
     "bot.commands.summary",
+    "bot.commands.help_cmd",
 ]
 
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 
 
 @bot.event
