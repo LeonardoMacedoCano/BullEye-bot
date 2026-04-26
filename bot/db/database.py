@@ -47,10 +47,29 @@ def init_db() -> None:
                 time    TEXT    NOT NULL,
                 active  INTEGER NOT NULL DEFAULT 1
             );
+
+            CREATE TABLE IF NOT EXISTS ticker_cache (
+                ticker      TEXT    PRIMARY KEY,
+                dy_rate     REAL,
+                dy_yield    REAL,
+                eps         REAL,
+                book_value  REAL,
+                updated_at  INTEGER NOT NULL
+            );
         """)
         conn.commit()
         try:
             conn.execute("ALTER TABLE tickers ADD COLUMN subcategory TEXT DEFAULT NULL")
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE tickers ADD COLUMN user_teto REAL DEFAULT NULL")
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE tickers RENAME COLUMN user_teto TO user_ceiling")
             conn.commit()
         except Exception:
             pass

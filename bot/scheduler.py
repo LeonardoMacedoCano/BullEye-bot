@@ -63,8 +63,8 @@ async def _check_schedules(bot: discord.Client, now: str) -> None:
             continue
         try:
             user = await bot.fetch_user(int(schedule["discord_id"]))
-            message = build_summary(schedule["user_id"], user.mention)
-            await user.send(message)
+            for msg in build_summary(schedule["user_id"], user.mention):
+                await user.send(msg)
             logger.info("Daily summary sent to user %s at %s", schedule["discord_id"], now)
         except Exception as exc:
             logger.error(

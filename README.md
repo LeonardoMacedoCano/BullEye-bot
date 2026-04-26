@@ -6,7 +6,7 @@ A Discord bot for monitoring financial tickers. Track your portfolio and watchli
 
 ## Features
 
-- Add tickers to wallet or watchlist (e.g. `AAPL`, `PETR4.SA`, `BTC-USD`)
+- Add tickers to wallet or watchlist (e.g. `AAPL`, `PETR4`, `BTC`)
 - Real-time price with 30-day high and low
 - Price alerts that trigger once when the target is reached
 - Daily summary delivered via DM at a scheduled time
@@ -24,10 +24,13 @@ A Discord bot for monitoring financial tickers. Track your portfolio and watchli
 | `!remove <TICKER>` | Remove a ticker and its alerts |
 | `!list` | List all your tickers |
 | `!alert <TICKER> <PRICE>` | Alert when price <= target (fires once) |
+| `!ceiling <TICKER> <PRICE>` | Set your personal ceiling price for a ticker |
+| `!ceiling <TICKER> clear` | Remove ceiling price |
+| `!ceiling <TICKER>` | Show current ceiling price |
 | `!schedule HH:MM` | Schedule a daily summary DM |
 | `!schedule` | Show your current schedule |
 | `!unschedule` | Cancel your daily summary |
-| `!resume` | Get your summary now |
+| `!summary` | Get your summary now |
 | `!help` | Show all commands |
 
 **Ticker tips:** type `BTC` and it becomes `BTC-USD`; type `PETR4` and it becomes `PETR4.SA`.
@@ -49,7 +52,7 @@ A Discord bot for monitoring financial tickers. Track your portfolio and watchli
 !schedule 09:00
 > Daily summary scheduled at 09:00.
 
-!resume
+!summary
 > Watchlist
 > Ticker    Price        H (30d)      L (30d)      F&G
 > ─────────────────────────────────────────────────────

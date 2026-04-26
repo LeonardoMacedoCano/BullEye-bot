@@ -1,4 +1,5 @@
 import sqlite3
+import time
 from bot.db.database import get_connection
 
 
@@ -52,6 +53,42 @@ def list_tickers(user_id: int) -> list[sqlite3.Row]:
             (user_id,),
         )
         return cursor.fetchall()
+    finally:
+        conn.close()
+
+
+def get_ticker_row(user_id: int, ticker: str) -> sqlite3.Row | None:
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            "SELECT * FROM tickers WHERE user_id = ? AND ticker = ?",
+            (user_id, ticker.upper()),
+        )
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+
+def set_user_ceiling(user_id: int, ticker: str, ceiling: float) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE tickers SET user_ceiling = ? WHERE user_id = ? AND ticker = ?",
+            (ceiling, user_id, ticker.upper()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def clear_user_ceiling(user_id: int, ticker: str) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE tickers SET user_ceiling = NULL WHERE user_id = ? AND ticker = ?",
+            (user_id, ticker.upper()),
+        )
+        conn.commit()
     finally:
         conn.close()
 
@@ -166,6 +203,32 @@ def deactivate_schedule(user_id: int) -> int:
         )
         conn.commit()
         return cursor.rowcount
+    finally:
+        conn.close()
+
+
+def get_ticker_cache(ticker: str) -> sqlite3.Row | None:
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            "SELECT * FROM ticker_cache WHERE ticker = ?", (ticker.upper(),)
+        )
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+
+def set_ticker_cache(
+    ticker: str, dy_rate: float, dy_yield: float, eps: float, book_value: float
+) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO ticker_cache (ticker, dy_rate, dy_yield, eps, book_value, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (ticker.upper(), dy_rate, dy_yield, eps, book_value, int(time.time())),
+        )
+        conn.commit()
     finally:
         conn.close()
 
