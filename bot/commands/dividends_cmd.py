@@ -1,8 +1,10 @@
+import asyncio
 import logging
 from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, list_tickers
 from bot.commands.summary import _build_dividends_radar
+from bot.utils import safe_defer
 
 logger = logging.getLogger(__name__)
 
@@ -13,16 +15,24 @@ class DividendsCog(commands.Cog):
 
     @commands.hybrid_command(name="dividends")
     async def dividends(self, ctx: commands.Context) -> None:
-        await ctx.defer()
+        if not await safe_defer(ctx):
+            return
         user = get_or_create_user(str(ctx.author.id))
-        async with ctx.typing():
-            tickers = list_tickers(user["id"])
-            if not tickers:
-                await ctx.send(
-                    f"{ctx.author.mention} You have no tickers configured. Use `!add <TICKER>` to get started."
-                )
+        tickers = list_tickers(user["id"])
+        if not tickers:
+            await ctx.send(
+                f"{ctx.author.mention} You have no tickers configured. Use `!add <TICKER>` to get started."
+            )
+            return
+
+        async with self.bot.heavy_semaphore:
+            try:
+                loop = asyncio.get_event_loop()
+                messages = await loop.run_in_executor(None, _build_dividends_radar, list(tickers))
+            except Exception:
+                logger.exception("Error in dividends for user %s", ctx.author.id)
+                await ctx.send(f"{ctx.author.mention} ❌ Erro ao buscar dividendos. Tente novamente.")
                 return
-            messages = _build_dividends_radar(list(tickers))
 
         if not messages:
             await ctx.send(f"{ctx.author.mention} No upcoming dividends in the next 60 days.")

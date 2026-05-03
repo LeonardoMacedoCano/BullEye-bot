@@ -10,7 +10,6 @@ class HelpCog(commands.Cog):
 
     @commands.hybrid_command(name="help")
     async def help_cmd(self, ctx: commands.Context) -> None:
-        await ctx.defer()
         p = ctx.prefix
         lines = [
             f"{ctx.author.mention} **BullEyeBot — Commands**\n",

@@ -13,7 +13,6 @@ class AlertsCog(commands.Cog):
 
     @commands.hybrid_command(name="alert")
     async def alert(self, ctx: commands.Context, ticker: str, price: float) -> None:
-        await ctx.defer()
         ticker = normalize_ticker(ticker)
         user = get_or_create_user(str(ctx.author.id))
 

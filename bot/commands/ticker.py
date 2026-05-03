@@ -1,9 +1,11 @@
+import asyncio
 import logging
 from typing import Literal
 from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, add_ticker, remove_ticker, list_tickers, get_ticker_category
 from bot.services.market import validate_ticker, normalize_ticker, get_ticker_subcategory, SUBCATEGORY_LABELS, SUBCATEGORY_ORDER
+from bot.utils import safe_defer
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,8 @@ class TickerCog(commands.Cog):
 
     @commands.hybrid_command(name="add")
     async def add(self, ctx: commands.Context, ticker: str, category: Literal["wallet", "watchlist"] = "watchlist") -> None:
-        await ctx.defer()
+        if not await safe_defer(ctx):
+            return
         if category not in VALID_CATEGORIES:
             await ctx.send(
                 f"{ctx.author.mention} Invalid category `{category}`. Use `wallet` or `watchlist`."
@@ -48,9 +51,19 @@ class TickerCog(commands.Cog):
 
         original = ticker.upper().strip()
         ticker = normalize_ticker(original)
-        async with ctx.typing():
+
+        def _validate():
             valid = validate_ticker(ticker)
             subcategory = get_ticker_subcategory(ticker) if valid else None
+            return valid, subcategory
+
+        try:
+            loop = asyncio.get_event_loop()
+            valid, subcategory = await loop.run_in_executor(None, _validate)
+        except Exception:
+            logger.exception("Error validating ticker %s", ticker)
+            await ctx.send(f"{ctx.author.mention} ❌ Erro ao validar o ticker. Tente novamente.")
+            return
 
         if not valid:
             await ctx.send(
@@ -83,7 +96,6 @@ class TickerCog(commands.Cog):
 
     @commands.hybrid_command(name="remove")
     async def remove(self, ctx: commands.Context, ticker: str) -> None:
-        await ctx.defer()
         original = ticker.upper().strip()
         ticker = normalize_ticker(original)
         user = get_or_create_user(str(ctx.author.id))
@@ -96,7 +108,6 @@ class TickerCog(commands.Cog):
 
     @commands.hybrid_command(name="list")
     async def list_tickers_cmd(self, ctx: commands.Context) -> None:
-        await ctx.defer()
         user = get_or_create_user(str(ctx.author.id))
         tickers = list_tickers(user["id"])
 

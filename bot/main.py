@@ -40,6 +40,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
+bot.heavy_semaphore = asyncio.Semaphore(3)
 
 
 @bot.event
@@ -48,14 +49,42 @@ async def on_ready() -> None:
     logger.info("BullEyeBot is online as %s (id: %s)", bot.user, bot.user.id)
 
 
+def _root_cause(error: Exception) -> Exception:
+    while hasattr(error, "original"):
+        error = error.original
+    return error
+
+
 @bot.event
 async def on_command_error(ctx: commands.Context, error: commands.CommandError) -> None:
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(f"{ctx.author.mention} Missing argument: `{error.param.name}`.")
-    elif isinstance(error, commands.CommandNotFound):
+        return
+    if isinstance(error, commands.CommandNotFound):
+        return
+
+    cause = _root_cause(error)
+
+    if isinstance(cause, discord.NotFound) and cause.code == 10062:
+        logger.warning(
+            "Command '%s' received stale/expired interaction (10062) — "
+            "token already invalid when bot processed it",
+            ctx.command,
+        )
+        try:
+            await ctx.channel.send(
+                f"{ctx.author.mention} ⚠️ Sua interação expirou. Tente o comando novamente.",
+                delete_after=8,
+            )
+        except Exception:
+            pass
+        return
+
+    logger.error("Command '%s' failed: %s", ctx.command, cause, exc_info=cause)
+    try:
+        await ctx.send(f"{ctx.author.mention} ❌ Erro inesperado. Tente novamente.")
+    except Exception:
         pass
-    else:
-        logger.error("Unhandled command error: %s", error)
 
 
 async def main() -> None:

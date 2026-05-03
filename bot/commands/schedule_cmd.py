@@ -15,7 +15,6 @@ class ScheduleCog(commands.Cog):
 
     @commands.hybrid_command(name="schedule")
     async def schedule(self, ctx: commands.Context, time: str = None) -> None:
-        await ctx.defer()
         user = get_or_create_user(str(ctx.author.id))
 
         if time is None:
@@ -50,7 +49,6 @@ class ScheduleCog(commands.Cog):
 
     @commands.hybrid_command(name="unschedule")
     async def unschedule(self, ctx: commands.Context) -> None:
-        await ctx.defer()
         user = get_or_create_user(str(ctx.author.id))
         count = deactivate_schedule(user["id"])
         if count == 0:

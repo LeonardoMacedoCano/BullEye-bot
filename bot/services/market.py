@@ -1,5 +1,6 @@
 import logging
 import re
+import threading
 import time
 import yfinance as yf
 
@@ -20,6 +21,7 @@ _PRICE_CACHE_TTL = 300
 _DIV_CACHE_TTL   = 86400
 
 _price_cache: dict[str, tuple[dict, float]] = {}
+_price_cache_lock = threading.Lock()
 
 
 def _ts_to_date(ts) -> str | None:
@@ -43,9 +45,10 @@ def normalize_ticker(ticker: str) -> str:
 
 def get_ticker_data(ticker: str) -> dict | None:
     now = time.time()
-    cached = _price_cache.get(ticker)
-    if cached is not None and now - cached[1] < _PRICE_CACHE_TTL:
-        return cached[0]
+    with _price_cache_lock:
+        cached = _price_cache.get(ticker)
+        if cached is not None and now - cached[1] < _PRICE_CACHE_TTL:
+            return cached[0]
     try:
         t = yf.Ticker(ticker)
         history = t.history(period="1mo")
@@ -70,7 +73,8 @@ def get_ticker_data(ticker: str) -> dict | None:
             "week_change_pct": week_change_pct,
             "month_change_pct": month_change_pct,
         }
-        _price_cache[ticker] = (data, now)
+        with _price_cache_lock:
+            _price_cache[ticker] = (data, now)
         return data
     except Exception as exc:
         logger.warning("Failed to fetch data for ticker %s: %s", ticker, exc)

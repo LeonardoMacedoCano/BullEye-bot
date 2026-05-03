@@ -1,5 +1,8 @@
+import asyncio
 import logging
 from discord.ext import commands
+
+from bot.utils import safe_defer
 
 from bot.db.repository import (
     get_or_create_user, list_tickers, update_ticker_subcategory, get_upcoming_dividends,
@@ -241,7 +244,7 @@ def _build_market_indicators(has_btc: bool, fg: dict | None) -> list[str]:
         ])
 
     table_str = _render_table(headers, data_rows)
-    msg = f"# Market Indicators\n```\n{table_str}\n```"
+    msg = f"# 📊 Market Indicators\n```\n{table_str}\n```"
     return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
 
 
@@ -289,7 +292,7 @@ def _build_performance(wallet: list, watchlist: list) -> list[str]:
             lines.append(f"  {period_label:<7}{bd:<{COL}}{wd}")
 
     table = "\n".join(lines)
-    msg = f"# Performance\n```\n{table}\n```"
+    msg = f"# 📈 Performance\n```\n{table}\n```"
     return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
 
 
@@ -308,14 +311,17 @@ def _build_dividends_radar(tickers: list) -> list[str]:
     if not db_rows:
         return []
 
+    def _fmt_date(d: str | None) -> str:
+        return d.replace("-", "/") if d else "—"
+
     headers = ["Ticker", "Ex-Date", "Pay-Date", "Amount"]
     data_rows: list[list[str]] = []
     for row in db_rows:
         ticker = row["ticker"]
         sym = _currency(ticker)
         name = _display_name(ticker)
-        ex_d = row["ex_dividend_date"] or "—"
-        pay_d = row["pay_date"] or "—"
+        ex_d = _fmt_date(row["ex_dividend_date"])
+        pay_d = _fmt_date(row["pay_date"])
         div_amount = row["dividend_amount"]
         amt_str = f"{sym}{div_amount:,.2f}" if div_amount else "—"
         data_rows.append([name, ex_d, pay_d, amt_str])
@@ -323,7 +329,7 @@ def _build_dividends_radar(tickers: list) -> list[str]:
     table_str = _render_table(headers, data_rows)
     if not table_str:
         return []
-    msg = f"# Upcoming Dividends\n```\n{table_str}\n```"
+    msg = f"# 📅 Upcoming Dividends\n```\n{table_str}\n```"
     return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
 
 
@@ -369,7 +375,7 @@ def _build_opportunities(tickers: list) -> list[str]:
         ])
 
     table_str = _render_table(headers, data_rows)
-    msg = f"# Buy Opportunities\n```\n{table_str}\n```"
+    msg = f"# 🛒 Buy Opportunities\n```\n{table_str}\n```"
     return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
 
 
@@ -387,9 +393,9 @@ def build_summary(user_id: int, discord_mention: str) -> list[str]:
 
     sections: list[str] = []
     if wallet:
-        sections.extend(_build_section("Wallet", wallet))
+        sections.extend(_build_section("💼 Wallet", wallet))
     if watchlist:
-        sections.extend(_build_section("Watchlist", watchlist))
+        sections.extend(_build_section("👀 Watchlist", watchlist))
     sections.extend(_build_market_indicators(has_btc, fg))
     sections.extend(_build_performance(wallet, watchlist))
     sections.extend(_build_dividends_radar(tickers))
@@ -409,13 +415,19 @@ class SummaryCog(commands.Cog):
 
     @commands.hybrid_command(name="summary")
     async def summary(self, ctx: commands.Context) -> None:
-        await ctx.defer()
+        if not await safe_defer(ctx):
+            return
         user = get_or_create_user(str(ctx.author.id))
-        async with ctx.typing():
-            messages = build_summary(user["id"], ctx.author.mention)
-        for msg in messages:
-            await ctx.send(msg)
-        logger.info("Summary sent to user %s", ctx.author.id)
+        async with self.bot.heavy_semaphore:
+            try:
+                loop = asyncio.get_event_loop()
+                messages = await loop.run_in_executor(None, build_summary, user["id"], ctx.author.mention)
+                for msg in messages:
+                    await ctx.send(msg)
+                logger.info("Summary sent to user %s", ctx.author.id)
+            except Exception:
+                logger.exception("Error in summary for user %s", ctx.author.id)
+                await ctx.send(f"{ctx.author.mention} ❌ Erro ao gerar o summary. Tente novamente.")
 
 
 async def setup(bot: commands.Bot) -> None:

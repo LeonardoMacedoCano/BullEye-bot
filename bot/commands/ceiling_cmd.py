@@ -1,8 +1,10 @@
+import asyncio
 import logging
 from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, get_ticker_category, get_ticker_row, set_user_ceiling, clear_user_ceiling
 from bot.services.market import normalize_ticker, get_ticker_data
+from bot.utils import safe_defer
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +19,8 @@ class CeilingCog(commands.Cog):
 
     @commands.hybrid_command(name="ceiling")
     async def ceiling(self, ctx: commands.Context, ticker: str, value: str = None) -> None:
-        await ctx.defer()
+        if not await safe_defer(ctx):
+            return
         original = ticker.upper().strip()
         ticker = normalize_ticker(original)
         user = get_or_create_user(str(ctx.author.id))
@@ -36,8 +39,13 @@ class CeilingCog(commands.Cog):
             if user_ceiling is None:
                 await ctx.send(f"{ctx.author.mention} No ceiling set for `{ticker}`.")
                 return
-            async with ctx.typing():
-                data = get_ticker_data(ticker)
+            try:
+                loop = asyncio.get_event_loop()
+                data = await loop.run_in_executor(None, get_ticker_data, ticker)
+            except Exception:
+                logger.exception("Error fetching data for %s", ticker)
+                await ctx.send(f"{ctx.author.mention} ❌ Erro ao buscar preço. Tente novamente.")
+                return
             if data:
                 price = data["current_price"]
                 margin = (user_ceiling - price) / price * 100
