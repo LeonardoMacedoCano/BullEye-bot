@@ -11,18 +11,9 @@ class AlertsCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @commands.command(name="alert")
-    async def alert(self, ctx: commands.Context, ticker: str, price: str) -> None:
+    @commands.hybrid_command(name="alert")
+    async def alert(self, ctx: commands.Context, ticker: str, price: float) -> None:
         ticker = normalize_ticker(ticker)
-
-        try:
-            target_price = float(price)
-        except ValueError:
-            await ctx.send(
-                f"{ctx.author.mention} Invalid price `{price}`. Please provide a numeric value."
-            )
-            return
-
         user = get_or_create_user(str(ctx.author.id))
 
         if not ticker_exists(user["id"], ticker):
@@ -32,12 +23,12 @@ class AlertsCog(commands.Cog):
             )
             return
 
-        add_alert(user["id"], ticker, target_price)
+        add_alert(user["id"], ticker, price)
         await ctx.send(
-            f"{ctx.author.mention} Alert set: `{ticker}` <= **${target_price:.2f}**. "
+            f"{ctx.author.mention} Alert set: `{ticker}` <= **${price:.2f}**. "
             f"You will be notified once when this condition is met."
         )
-        logger.info("User %s set alert: %s <= %.2f", ctx.author.id, ticker, target_price)
+        logger.info("User %s set alert: %s <= %.2f", ctx.author.id, ticker, price)
 
 
 async def setup(bot: commands.Bot) -> None:

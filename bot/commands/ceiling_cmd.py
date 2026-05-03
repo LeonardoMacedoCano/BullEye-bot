@@ -15,7 +15,7 @@ class CeilingCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @commands.command(name="ceiling")
+    @commands.hybrid_command(name="ceiling")
     async def ceiling(self, ctx: commands.Context, ticker: str, value: str = None) -> None:
         original = ticker.upper().strip()
         ticker = normalize_ticker(original)

@@ -294,7 +294,7 @@ class SummaryCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @commands.command(name="summary")
+    @commands.hybrid_command(name="summary")
     async def summary(self, ctx: commands.Context) -> None:
         user = get_or_create_user(str(ctx.author.id))
         async with ctx.typing():

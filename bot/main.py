@@ -43,6 +43,7 @@ bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 
 @bot.event
 async def on_ready() -> None:
+    await bot.tree.sync()
     logger.info("BullEyeBot is online as %s (id: %s)", bot.user, bot.user.id)
 
 

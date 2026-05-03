@@ -8,7 +8,7 @@ class HelpCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @commands.command(name="help")
+    @commands.hybrid_command(name="help")
     async def help_cmd(self, ctx: commands.Context) -> None:
         p = ctx.prefix
         lines = [

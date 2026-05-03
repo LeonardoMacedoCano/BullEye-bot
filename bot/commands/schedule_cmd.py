@@ -13,7 +13,7 @@ class ScheduleCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @commands.command(name="schedule")
+    @commands.hybrid_command(name="schedule")
     async def schedule(self, ctx: commands.Context, time: str = None) -> None:
         user = get_or_create_user(str(ctx.author.id))
 
@@ -47,7 +47,7 @@ class ScheduleCog(commands.Cog):
         await ctx.send(f"{ctx.author.mention} Daily summary scheduled at **{time}**.")
         logger.info("User %s set daily schedule at %s", ctx.author.id, time)
 
-    @commands.command(name="unschedule")
+    @commands.hybrid_command(name="unschedule")
     async def unschedule(self, ctx: commands.Context) -> None:
         user = get_or_create_user(str(ctx.author.id))
         count = deactivate_schedule(user["id"])

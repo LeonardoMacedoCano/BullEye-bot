@@ -1,4 +1,5 @@
 import logging
+from typing import Literal
 from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, add_ticker, remove_ticker, list_tickers, get_ticker_category
@@ -36,8 +37,8 @@ class TickerCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @commands.command(name="add")
-    async def add(self, ctx: commands.Context, ticker: str, category: str = "watchlist") -> None:
+    @commands.hybrid_command(name="add")
+    async def add(self, ctx: commands.Context, ticker: str, category: Literal["wallet", "watchlist"] = "watchlist") -> None:
         if category not in VALID_CATEGORIES:
             await ctx.send(
                 f"{ctx.author.mention} Invalid category `{category}`. Use `wallet` or `watchlist`."
@@ -79,7 +80,7 @@ class TickerCog(commands.Cog):
             await ctx.send(f"{ctx.author.mention} Ticker `{ticker}` added to **{category}**{sub_label}.")
         logger.info("User %s added ticker %s to %s (%s)", ctx.author.id, ticker, category, subcategory)
 
-    @commands.command(name="remove")
+    @commands.hybrid_command(name="remove")
     async def remove(self, ctx: commands.Context, ticker: str) -> None:
         original = ticker.upper().strip()
         ticker = normalize_ticker(original)
@@ -91,7 +92,7 @@ class TickerCog(commands.Cog):
             await ctx.send(f"{ctx.author.mention} Ticker `{ticker}` removed.")
             logger.info("User %s removed ticker %s", ctx.author.id, ticker)
 
-    @commands.command(name="list")
+    @commands.hybrid_command(name="list")
     async def list_tickers_cmd(self, ctx: commands.Context) -> None:
         user = get_or_create_user(str(ctx.author.id))
         tickers = list_tickers(user["id"])
