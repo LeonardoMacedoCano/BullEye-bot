@@ -32,6 +32,7 @@ COGS = [
     "bot.commands.schedule_cmd",
     "bot.commands.summary",
     "bot.commands.ceiling_cmd",
+    "bot.commands.dividends_cmd",
     "bot.commands.help_cmd",
 ]
 

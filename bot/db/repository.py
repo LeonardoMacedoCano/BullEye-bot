@@ -218,13 +218,21 @@ def get_ticker_cache(ticker: str) -> sqlite3.Row | None:
         conn.close()
 
 
-def set_ticker_cache(ticker: str, dy_rate: float, dy_yield: float) -> None:
+def set_ticker_cache(
+    ticker: str,
+    dy_rate: float,
+    dy_yield: float,
+    ex_dividend_date: str | None = None,
+    pay_date: str | None = None,
+    dividend_amount: float | None = None,
+) -> None:
     conn = get_connection()
     try:
         conn.execute(
-            "INSERT OR REPLACE INTO ticker_cache (ticker, dy_rate, dy_yield, updated_at) "
-            "VALUES (?, ?, ?, ?)",
-            (ticker.upper(), dy_rate, dy_yield, int(time.time())),
+            "INSERT OR REPLACE INTO ticker_cache "
+            "(ticker, dy_rate, dy_yield, ex_dividend_date, pay_date, dividend_amount, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (ticker.upper(), dy_rate, dy_yield, ex_dividend_date, pay_date, dividend_amount, int(time.time())),
         )
         conn.commit()
     finally:
@@ -251,5 +259,27 @@ def update_last_sent_date(user_id: int, date_str: str) -> None:
             (date_str, user_id),
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def get_upcoming_dividends(tickers: list[str], days: int = 60) -> list[sqlite3.Row]:
+    from datetime import date, timedelta
+    today = date.today().isoformat()
+    limit = (date.today() + timedelta(days=days)).isoformat()
+    upper = [t.upper() for t in tickers]
+    if not upper:
+        return []
+    placeholders = ",".join("?" * len(upper))
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            f"SELECT * FROM ticker_cache WHERE ticker IN ({placeholders}) "
+            "AND ex_dividend_date IS NOT NULL "
+            "AND ex_dividend_date >= ? AND ex_dividend_date <= ? "
+            "ORDER BY ex_dividend_date",
+            (*upper, today, limit),
+        )
+        return cursor.fetchall()
     finally:
         conn.close()

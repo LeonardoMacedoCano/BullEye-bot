@@ -10,6 +10,7 @@ class HelpCog(commands.Cog):
 
     @commands.hybrid_command(name="help")
     async def help_cmd(self, ctx: commands.Context) -> None:
+        await ctx.defer()
         p = ctx.prefix
         lines = [
             f"{ctx.author.mention} **BullEyeBot — Commands**\n",
@@ -24,6 +25,7 @@ class HelpCog(commands.Cog):
             f"`{p}schedule` — Show your current schedule",
             f"`{p}unschedule` — Cancel your daily summary",
             f"`{p}summary` — Get your current summary",
+            f"`{p}dividends` — Show upcoming dividends (next 60 days)",
             f"`{p}help` — Show this message",
             "\n**Ticker tips:** Brazilian B3 stocks auto-format (`PETR4` → `PETR4.SA`). `BTC` auto-formats to `BTC-USD`.",
         ]

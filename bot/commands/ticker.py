@@ -39,6 +39,7 @@ class TickerCog(commands.Cog):
 
     @commands.hybrid_command(name="add")
     async def add(self, ctx: commands.Context, ticker: str, category: Literal["wallet", "watchlist"] = "watchlist") -> None:
+        await ctx.defer()
         if category not in VALID_CATEGORIES:
             await ctx.send(
                 f"{ctx.author.mention} Invalid category `{category}`. Use `wallet` or `watchlist`."
@@ -82,6 +83,7 @@ class TickerCog(commands.Cog):
 
     @commands.hybrid_command(name="remove")
     async def remove(self, ctx: commands.Context, ticker: str) -> None:
+        await ctx.defer()
         original = ticker.upper().strip()
         ticker = normalize_ticker(original)
         user = get_or_create_user(str(ctx.author.id))
@@ -94,6 +96,7 @@ class TickerCog(commands.Cog):
 
     @commands.hybrid_command(name="list")
     async def list_tickers_cmd(self, ctx: commands.Context) -> None:
+        await ctx.defer()
         user = get_or_create_user(str(ctx.author.id))
         tickers = list_tickers(user["id"])
 

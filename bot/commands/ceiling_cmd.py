@@ -17,6 +17,7 @@ class CeilingCog(commands.Cog):
 
     @commands.hybrid_command(name="ceiling")
     async def ceiling(self, ctx: commands.Context, ticker: str, value: str = None) -> None:
+        await ctx.defer()
         original = ticker.upper().strip()
         ticker = normalize_ticker(original)
         user = get_or_create_user(str(ctx.author.id))

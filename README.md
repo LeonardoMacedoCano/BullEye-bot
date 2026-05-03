@@ -6,17 +6,24 @@ A Discord bot for monitoring financial tickers. Track your portfolio and watchli
 
 ## Features
 
-- Add tickers to wallet or watchlist (e.g. `AAPL`, `PETR4`, `BTC`)
-- Real-time price with 30-day high and low
+- Add tickers to wallet or watchlist (`AAPL`, `PETR4`, `BTC`, ETFs, etc.)
+- Day % change in every summary table
+- Market sentiment header: VIX, IBOVESPA, and Bitcoin Fear & Greed Index
+- Top Movers section: best and worst performers of the day and month
+- Dividend radar: upcoming ex-dates and pay-dates for the next 60 days
+- BR stocks show Dividend Yield (DY%) automatically
 - Price alerts that trigger once when the target is reached
+- Personal ceiling price with margin tracking
+- Buy Opportunities section: tickers trading at or below your ceiling
 - Daily summary delivered via DM at a scheduled time
-- Fear & Greed Index shown alongside Bitcoin
 - Brazilian B3 tickers and `BTC` are auto-formatted
 - Each user has completely isolated data
 
 ---
 
 ## Commands
+
+Both `!` prefix and `/` slash commands are supported. Slash commands (`/`) show autocomplete suggestions as you type.
 
 | Command | Description |
 |---------|-------------|
@@ -26,37 +33,55 @@ A Discord bot for monitoring financial tickers. Track your portfolio and watchli
 | `!alert <TICKER> <PRICE>` | Alert when price <= target (fires once) |
 | `!ceiling <TICKER> <PRICE>` | Set your personal ceiling price for a ticker |
 | `!ceiling <TICKER> clear` | Remove ceiling price |
-| `!ceiling <TICKER>` | Show current ceiling price |
+| `!ceiling <TICKER>` | Show current ceiling price vs market |
 | `!schedule HH:MM` | Schedule a daily summary DM |
 | `!schedule` | Show your current schedule |
 | `!unschedule` | Cancel your daily summary |
-| `!summary` | Get your summary now |
+| `!summary` | Get your full summary now |
+| `!dividends` | Show upcoming dividends (next 60 days) |
 | `!help` | Show all commands |
 
-**Ticker tips:** type `BTC` and it becomes `BTC-USD`; type `PETR4` and it becomes `PETR4.SA`.
+> **Slash commands note:** autocomplete only works with `/`. The `!` prefix works for all commands but does not show suggestions.
+
+**Ticker tips:** type `BTC` → auto-formats to `BTC-USD`; type `PETR4` → auto-formats to `PETR4.SA`.
 
 ---
 
-## Example
+## Summary layout
 
 ```
-!add BTC
-> BTC interpreted as BTC-USD. Added to watchlist.
+@you Your summary:
+## Market
+VIX   18.5  +2.1%  Moderate
+IBOV  131.450  -0.8%
+F&G   65  (Greed)
 
-!add PETR4 wallet
-> PETR4 interpreted as PETR4.SA. Added to wallet.
+## Wallet
+- **BR Stocks**
+Ticker  Price       Day%    DY%     Ceiling
+───────────────────────────────────────────
+PETR4   R$38.10     +1.2%   6.54%   —
+VALE3   R$56.40     -0.5%   8.21%   R$60.00 +6%
 
-!alert AAPL 170.00
-> Alert set: AAPL <= $170.00.
+- **Crypto**
+Ticker  Price         Day%    Ceiling
+──────────────────────────────────────
+BTC     $97,200.00    +3.1%   —
 
-!schedule 09:00
-> Daily summary scheduled at 09:00.
+## Top Movers
+         Day%            Month%
+  Best:  PETR4 +1.2%     VALE3 +8.4%
+  Worst: VALE3 -0.5%     PETR4 -2.1%
 
-!summary
-> Watchlist
-> Ticker    Price        H (30d)      L (30d)      F&G
-> ─────────────────────────────────────────────────────
-> BTC       $78,334.98   $78,502.91   $64,971.71   46 (Fear)
+## Upcoming Dividends
+Ticker  Ex-Date     Pay-Date    Amount
+──────────────────────────────────────
+PETR4   2026-05-15  2026-05-30  R$1.25
+
+## Buy Opportunities
+Ticker  Price      Ceiling    Margin  In
+────────────────────────────────────────
+VALE3   R$56.40    R$60.00    +6.4%   wallet
 ```
 
 ---
@@ -68,7 +93,7 @@ A Discord bot for monitoring financial tickers. Track your portfolio and watchli
 1. Go to the Discord Developer Portal and create a new application.
 2. Under **Bot**, click "Reset Token" and copy it — this is your `DISCORD_TOKEN`.
 3. Enable **Message Content Intent** under Privileged Gateway Intents.
-4. Under **OAuth2 > URL Generator**, select scope `bot` with permissions: Read Messages, Send Messages, Read Message History.
+4. Under **OAuth2 > URL Generator**, select scope `bot` + `applications.commands` with permissions: Read Messages, Send Messages, Read Message History.
 5. Open the generated URL to invite the bot to your server.
 
 ### 2. Configure and run
@@ -84,6 +109,8 @@ Start with Docker:
 ```bash
 docker-compose up -d
 ```
+
+> **Slash commands propagation:** after the first start, Discord may take up to 1 hour to show `/` commands globally.
 
 ---
 

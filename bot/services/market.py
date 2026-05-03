@@ -16,10 +16,20 @@ SUBCATEGORY_LABELS = {
     "stocks": "Stocks",
 }
 
-_PRICE_CACHE_TTL = 300   # 5 minutes — shared across all users
-_DIV_CACHE_TTL   = 86400  # 24h
+_PRICE_CACHE_TTL = 300
+_DIV_CACHE_TTL   = 86400
 
 _price_cache: dict[str, tuple[dict, float]] = {}
+
+
+def _ts_to_date(ts) -> str | None:
+    if not ts:
+        return None
+    try:
+        import datetime
+        return datetime.date.fromtimestamp(int(ts)).isoformat()
+    except Exception:
+        return None
 
 
 def normalize_ticker(ticker: str) -> str:
@@ -42,15 +52,23 @@ def get_ticker_data(ticker: str) -> dict | None:
         if history.empty:
             logger.warning("No data returned for ticker %s (empty history)", ticker)
             return None
-        current_price = float(history["Close"].iloc[-1])
+        close = history["Close"]
+        current_price = float(close.iloc[-1])
         high_30d = float(history["High"].max())
         low_series = history["Low"][history["Low"] > 0]
         low_30d = float(low_series.min()) if not low_series.empty else float(history["Low"].min())
+        n = len(close)
+        day_change_pct   = float((close.iloc[-1] - close.iloc[-2]) / close.iloc[-2] * 100) if n >= 2 else 0.0
+        week_change_pct  = float((close.iloc[-1] - close.iloc[-6]) / close.iloc[-6] * 100) if n >= 6 else day_change_pct
+        month_change_pct = float((close.iloc[-1] - close.iloc[0])  / close.iloc[0]  * 100) if n >= 2 else 0.0
         data = {
             "ticker": ticker.upper(),
             "current_price": current_price,
             "high_30d": high_30d,
             "low_30d": low_30d,
+            "day_change_pct": day_change_pct,
+            "week_change_pct": week_change_pct,
+            "month_change_pct": month_change_pct,
         }
         _price_cache[ticker] = (data, now)
         return data
@@ -77,7 +95,6 @@ def _dividends_trailing_12m(ticker: str) -> float:
 
 
 def get_br_stock_metrics(ticker: str, current_price: float) -> dict:
-    """Returns {dy_yield} for a BR stock. Uses ticker_cache (TTL 24h)."""
     from bot.db.repository import get_ticker_cache, set_ticker_cache
 
     row = get_ticker_cache(ticker)
@@ -85,9 +102,12 @@ def get_br_stock_metrics(ticker: str, current_price: float) -> dict:
 
     if stale:
         try:
-            info     = yf.Ticker(ticker).info
-            dy_rate  = float(info.get("trailingAnnualDividendRate") or 0.0)
-            dy_yield = float(info.get("trailingAnnualDividendYield") or 0.0)
+            info         = yf.Ticker(ticker).info
+            dy_rate      = float(info.get("trailingAnnualDividendRate") or 0.0)
+            dy_yield     = float(info.get("trailingAnnualDividendYield") or 0.0)
+            ex_div_date  = _ts_to_date(info.get("exDividendDate"))
+            pay_date_str = _ts_to_date(info.get("payDate"))
+            div_amount   = float(info.get("dividendRate") or dy_rate or 0.0)
         except Exception as exc:
             logger.warning("Failed to fetch .info for %s: %s", ticker, exc)
             return {"dy_yield": 0.0}
@@ -95,7 +115,12 @@ def get_br_stock_metrics(ticker: str, current_price: float) -> dict:
         if dy_rate == 0.0:
             dy_rate = _dividends_trailing_12m(ticker)
 
-        set_ticker_cache(ticker, dy_rate, dy_yield)
+        set_ticker_cache(
+            ticker, dy_rate, dy_yield,
+            ex_dividend_date=ex_div_date,
+            pay_date=pay_date_str,
+            dividend_amount=div_amount if div_amount > 0 else None,
+        )
     else:
         dy_rate  = float(row["dy_rate"] or 0.0)
         dy_yield = float(row["dy_yield"] or 0.0)
@@ -120,3 +145,43 @@ def get_ticker_subcategory(ticker: str) -> str | None:
     except Exception:
         pass
     return None
+
+
+def get_dividend_info(ticker: str) -> dict | None:
+    from bot.db.repository import get_ticker_cache, set_ticker_cache
+
+    row = get_ticker_cache(ticker)
+    stale = row is None or (time.time() - row["updated_at"]) > _DIV_CACHE_TTL
+
+    if stale:
+        try:
+            info         = yf.Ticker(ticker).info
+            dy_rate      = float(info.get("trailingAnnualDividendRate") or 0.0)
+            dy_yield     = float(info.get("trailingAnnualDividendYield") or 0.0)
+            ex_div_date  = _ts_to_date(info.get("exDividendDate"))
+            pay_date_str = _ts_to_date(info.get("payDate"))
+            div_amount   = float(info.get("dividendRate") or dy_rate or 0.0)
+            set_ticker_cache(
+                ticker, dy_rate, dy_yield,
+                ex_dividend_date=ex_div_date,
+                pay_date=pay_date_str,
+                dividend_amount=div_amount if div_amount > 0 else None,
+            )
+        except Exception as exc:
+            logger.warning("Failed to fetch dividend info for %s: %s", ticker, exc)
+            return None
+        ex_div_date_val = ex_div_date
+        pay_date_val    = pay_date_str
+        div_amount_val  = div_amount
+    else:
+        ex_div_date_val = row["ex_dividend_date"]
+        pay_date_val    = row["pay_date"]
+        div_amount_val  = row["dividend_amount"]
+
+    if not ex_div_date_val:
+        return None
+    return {
+        "ex_date": ex_div_date_val,
+        "pay_date": pay_date_val,
+        "amount": float(div_amount_val) if div_amount_val else 0.0,
+    }

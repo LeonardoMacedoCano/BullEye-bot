@@ -1,13 +1,15 @@
 import logging
-import discord
 from discord.ext import commands
 
-from bot.db.repository import get_or_create_user, list_tickers, update_ticker_subcategory
+from bot.db.repository import (
+    get_or_create_user, list_tickers, update_ticker_subcategory, get_upcoming_dividends,
+)
 from bot.services.market import (
-    get_ticker_data, get_ticker_subcategory, get_br_stock_metrics,
+    get_ticker_data, get_ticker_subcategory, get_br_stock_metrics, get_dividend_info,
     SUBCATEGORY_ORDER, SUBCATEGORY_LABELS,
 )
 from bot.services.fear_greed import get_fear_greed_index
+from bot.services.sentiment import get_vix, get_ibov
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,11 @@ def _fmt(value: float, symbol: str) -> str:
     return f"{symbol}{value:,.2f}"
 
 
+def _fmt_pct(pct: float) -> str:
+    sign = "+" if pct >= 0 else ""
+    return f"{sign}{pct:.1f}%"
+
+
 def _fmt_ceiling(ceiling: float | None, current_price: float, sym: str) -> str:
     if ceiling is None:
         return "—"
@@ -37,7 +44,6 @@ def _fmt_ceiling(ceiling: float | None, current_price: float, sym: str) -> str:
 
 
 def _render_table(headers: list[str], rows: list[list[str]]) -> str:
-    """Dynamic column widths; skips columns where every value is '—'."""
     active = [i for i in range(len(headers)) if any(r[i] != "—" for r in rows)]
     if not active:
         return ""
@@ -54,14 +60,30 @@ def _render_table(headers: list[str], rows: list[list[str]]) -> str:
     return "\n".join([header_line, sep] + data_lines)
 
 
-def _collect_rows(
-    group_rows: list, fg: dict | None, show_br: bool
-) -> tuple[list[str], list[list[str]]]:
-    """Return (headers, data_rows) with all cell values pre-formatted as strings."""
+def _collect_rows(group_rows: list, show_br: bool) -> tuple[list[str], list[list[str]]]:
     data_rows: list[list[str]] = []
 
     if show_br:
-        headers = ["Ticker", "Price", "DY%", "Ceiling"]
+        headers = ["Ticker", "Price", "Day%", "DY%", "Ceiling"]
+        for row in group_rows:
+            ticker = row["ticker"]
+            name = _display_name(ticker)
+            sym = _currency(ticker)
+            try:
+                ceiling_val = row["user_ceiling"]
+            except (KeyError, IndexError):
+                ceiling_val = None
+            market = get_ticker_data(ticker)
+            if not market:
+                data_rows.append([name, "—", "—", "—", "—"])
+                continue
+            cp = market["current_price"]
+            day_str = _fmt_pct(market.get("day_change_pct", 0.0))
+            m = get_br_stock_metrics(ticker, cp)
+            dy_str = f"{m['dy_yield']*100:.2f}%" if m["dy_yield"] > 0 else "—"
+            data_rows.append([name, _fmt(cp, sym), day_str, dy_str, _fmt_ceiling(ceiling_val, cp, sym)])
+    else:
+        headers = ["Ticker", "Price", "Day%", "Ceiling"]
         for row in group_rows:
             ticker = row["ticker"]
             name = _display_name(ticker)
@@ -75,51 +97,8 @@ def _collect_rows(
                 data_rows.append([name, "—", "—", "—"])
                 continue
             cp = market["current_price"]
-            m = get_br_stock_metrics(ticker, cp)
-            dy_str = f"{m['dy_yield']*100:.2f}%" if m["dy_yield"] > 0 else "—"
-            data_rows.append([
-                name,
-                _fmt(cp, sym),
-                dy_str,
-                _fmt_ceiling(ceiling_val, cp, sym),
-            ])
-    else:
-        has_fg = fg is not None and any(r["ticker"].upper() == "BTC-USD" for r in group_rows)
-        headers = ["Ticker", "Price", "H (30d)", "L (30d)"]
-        if has_fg:
-            headers.append("F&G")
-        headers.append("Ceiling")
-
-        for row in group_rows:
-            ticker = row["ticker"]
-            name = _display_name(ticker)
-            sym = _currency(ticker)
-            try:
-                ceiling_val = row["user_ceiling"]
-            except (KeyError, IndexError):
-                ceiling_val = None
-            market = get_ticker_data(ticker)
-            if not market:
-                cells = [name, "—", "—", "—"]
-                if has_fg:
-                    cells.append("—")
-                cells.append("—")
-                data_rows.append(cells)
-                continue
-            cp = market["current_price"]
-            cells = [
-                name,
-                _fmt(cp, sym),
-                _fmt(market["high_30d"], sym),
-                _fmt(market["low_30d"],  sym),
-            ]
-            if has_fg:
-                cells.append(
-                    f"{fg['value']} ({fg['classification']})"
-                    if ticker.upper() == "BTC-USD" else "—"
-                )
-            cells.append(_fmt_ceiling(ceiling_val, cp, sym))
-            data_rows.append(cells)
+            day_str = _fmt_pct(market.get("day_change_pct", 0.0))
+            data_rows.append([name, _fmt(cp, sym), day_str, _fmt_ceiling(ceiling_val, cp, sym)])
 
     return headers, data_rows
 
@@ -147,7 +126,7 @@ def _group_by_subcategory(rows: list) -> list[tuple[str | None, list]]:
     return ordered
 
 
-def _build_section(title: str, rows: list, fg: dict | None) -> list[str]:
+def _build_section(title: str, rows: list) -> list[str]:
     groups = _group_by_subcategory(rows)
     if not (len(groups) > 1 or (len(groups) == 1 and groups[0][0] is not None)):
         groups = [(None, rows)]
@@ -156,7 +135,7 @@ def _build_section(title: str, rows: list, fg: dict | None) -> list[str]:
     heading_emitted = False
 
     def _block(tbl: str, lbl: str | None, with_cat: bool) -> str:
-        parts = [f"## {title}"] if with_cat else []
+        parts = [f"# {title}"] if with_cat else []
         if lbl:
             parts.append(f"- **{lbl}**")
         parts.append(f"```\n{tbl}\n```")
@@ -165,7 +144,7 @@ def _build_section(title: str, rows: list, fg: dict | None) -> list[str]:
     for key, group_rows in groups:
         label = SUBCATEGORY_LABELS.get(key, key) if key else None
         show_br = key == "br-stocks"
-        headers, data_rows = _collect_rows(group_rows, fg, show_br)
+        headers, data_rows = _collect_rows(group_rows, show_br)
         table_str = _render_table(headers, data_rows)
         if not table_str:
             continue
@@ -221,6 +200,133 @@ def _backfill_subcategories(user_id: int, tickers: list) -> list:
     return result
 
 
+def _pack_messages(sections: list[str]) -> list[str]:
+    packed: list[str] = []
+    current = ""
+    for s in sections:
+        if not current:
+            current = s
+        elif len(current) + 1 + len(s) <= _MSG_LIMIT:
+            current += "\n" + s
+        else:
+            packed.append(current)
+            current = s
+    if current:
+        packed.append(current)
+    return packed
+
+
+def _build_market_indicators(has_btc: bool, fg: dict | None) -> list[str]:
+    vix = get_vix()
+    ibov = get_ibov()
+    if not vix and not ibov and not (has_btc and fg):
+        return []
+
+    headers = ["Index", "Description", "Region", "Value", "Day%", "Status"]
+    data_rows: list[list[str]] = []
+    if vix:
+        data_rows.append([
+            "VIX", "Volatility Index", "Global",
+            f"{vix['level']:.1f}", _fmt_pct(vix['day_change_pct']), vix['status'],
+        ])
+    if ibov:
+        data_rows.append([
+            "IBOV", "Bovespa Index", "BR/Stocks",
+            f"{ibov['level']:,.0f}", _fmt_pct(ibov['day_change_pct']), "—",
+        ])
+    if has_btc and fg:
+        data_rows.append([
+            "F&G", "Fear & Greed", "Crypto/BTC",
+            str(fg['value']), "—", fg['classification'],
+        ])
+
+    table_str = _render_table(headers, data_rows)
+    msg = f"# Market Indicators\n```\n{table_str}\n```"
+    return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
+
+
+def _build_performance(wallet: list, watchlist: list) -> list[str]:
+    def _get_movers(rows: list) -> list[dict]:
+        out = []
+        for row in rows:
+            data = get_ticker_data(row["ticker"])
+            if data:
+                out.append({
+                    "name":  _display_name(row["ticker"]),
+                    "day":   data.get("day_change_pct", 0.0),
+                    "week":  data.get("week_change_pct", 0.0),
+                    "month": data.get("month_change_pct", 0.0),
+                })
+        return out
+
+    groups: list[tuple[str, list]] = []
+    for label, rows in [("Wallet", wallet), ("Watchlist", watchlist)]:
+        if rows:
+            movers = _get_movers(rows)
+            if movers:
+                groups.append((label, movers))
+
+    if not groups:
+        return []
+
+    all_bd: list[str] = []
+    for _, items in groups:
+        for _, key in [("Day:", "day"), ("Week:", "week"), ("Month:", "month")]:
+            best = max(items, key=lambda x: x[key])
+            all_bd.append(f"▲ {best['name']} {_fmt_pct(best[key])}")
+    COL = max(len(s) for s in all_bd) + 2
+
+    lines: list[str] = []
+
+    for label, items in groups:
+        if len(groups) > 1:
+            lines.append(label)
+        for period_label, key in [("Day:", "day"), ("Week:", "week"), ("Month:", "month")]:
+            best  = max(items, key=lambda x: x[key])
+            worst = min(items, key=lambda x: x[key])
+            bd = f"▲ {best['name']} {_fmt_pct(best[key])}"
+            wd = f"▼ {worst['name']} {_fmt_pct(worst[key])}"
+            lines.append(f"  {period_label:<7}{bd:<{COL}}{wd}")
+
+    table = "\n".join(lines)
+    msg = f"# Performance\n```\n{table}\n```"
+    return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
+
+
+def _build_dividends_radar(tickers: list) -> list[str]:
+    for row in tickers:
+        ticker = row["ticker"]
+        if ticker.upper().endswith(".SA"):
+            data = get_ticker_data(ticker)
+            if data:
+                get_br_stock_metrics(ticker, data["current_price"])
+        else:
+            get_dividend_info(ticker)
+
+    ticker_names = [row["ticker"] for row in tickers]
+    db_rows = get_upcoming_dividends(ticker_names)
+    if not db_rows:
+        return []
+
+    headers = ["Ticker", "Ex-Date", "Pay-Date", "Amount"]
+    data_rows: list[list[str]] = []
+    for row in db_rows:
+        ticker = row["ticker"]
+        sym = _currency(ticker)
+        name = _display_name(ticker)
+        ex_d = row["ex_dividend_date"] or "—"
+        pay_d = row["pay_date"] or "—"
+        div_amount = row["dividend_amount"]
+        amt_str = f"{sym}{div_amount:,.2f}" if div_amount else "—"
+        data_rows.append([name, ex_d, pay_d, amt_str])
+
+    table_str = _render_table(headers, data_rows)
+    if not table_str:
+        return []
+    msg = f"# Upcoming Dividends\n```\n{table_str}\n```"
+    return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
+
+
 def _build_opportunities(tickers: list) -> list[str]:
     opportunities = []
     for row in tickers:
@@ -263,7 +369,7 @@ def _build_opportunities(tickers: list) -> list[str]:
         ])
 
     table_str = _render_table(headers, data_rows)
-    msg = f"## Buy Opportunities\n```\n{table_str}\n```"
+    msg = f"# Buy Opportunities\n```\n{table_str}\n```"
     return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
 
 
@@ -281,13 +387,20 @@ def build_summary(user_id: int, discord_mention: str) -> list[str]:
 
     sections: list[str] = []
     if wallet:
-        sections.extend(_build_section("Wallet", wallet, fg))
+        sections.extend(_build_section("Wallet", wallet))
     if watchlist:
-        sections.extend(_build_section("Watchlist", watchlist, fg))
-
-    sections[0] = f"{discord_mention} Your summary:\n{sections[0]}"
+        sections.extend(_build_section("Watchlist", watchlist))
+    sections.extend(_build_market_indicators(has_btc, fg))
+    sections.extend(_build_performance(wallet, watchlist))
+    sections.extend(_build_dividends_radar(tickers))
     sections.extend(_build_opportunities(tickers))
-    return sections
+
+    if not sections:
+        return [f"{discord_mention} Could not fetch data for your tickers."]
+
+    packed = _pack_messages(sections)
+    packed[0] = f"{discord_mention} Your summary:\n{packed[0]}"
+    return packed
 
 
 class SummaryCog(commands.Cog):
@@ -296,6 +409,7 @@ class SummaryCog(commands.Cog):
 
     @commands.hybrid_command(name="summary")
     async def summary(self, ctx: commands.Context) -> None:
+        await ctx.defer()
         user = get_or_create_user(str(ctx.author.id))
         async with ctx.typing():
             messages = build_summary(user["id"], ctx.author.mention)

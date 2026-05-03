@@ -65,9 +65,9 @@ async def _check_schedules(bot: discord.Client, now: str, today: str) -> None:
     schedules = get_all_active_schedules()
     for schedule in schedules:
         if schedule["last_sent_date"] == today:
-            continue  # already sent today
+            continue
         if schedule["time"] != now:
-            continue  # not the scheduled time
+            continue
         try:
             user = await bot.fetch_user(int(schedule["discord_id"]))
             for msg in build_summary(schedule["user_id"], user.mention):

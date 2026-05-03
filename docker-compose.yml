@@ -5,9 +5,9 @@ services:
       context: ${BULLEYEBOT_SOURCE_PATH:-.}
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - DATABASE_PATH=${DATABASE_PATH}
-      - PREFIX=${PREFIX}
-      - TIMEZONE=${TIMEZONE}
+      - DATABASE_PATH=${DATABASE_PATH:-/data/bot.db}
+      - PREFIX=${PREFIX:-!}
+      - TIMEZONE=${TIMEZONE:-UTC}
     volumes:
       - bot_data:/data
     restart: unless-stopped

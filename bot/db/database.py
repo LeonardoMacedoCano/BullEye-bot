@@ -51,10 +51,13 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS ticker_cache (
-                ticker     TEXT    PRIMARY KEY,
-                dy_rate    REAL,
-                dy_yield   REAL,
-                updated_at INTEGER NOT NULL
+                ticker           TEXT    PRIMARY KEY,
+                dy_rate          REAL,
+                dy_yield         REAL,
+                ex_dividend_date TEXT    DEFAULT NULL,
+                pay_date         TEXT    DEFAULT NULL,
+                dividend_amount  REAL    DEFAULT NULL,
+                updated_at       INTEGER NOT NULL
             );
         """)
         logger.info("Database initialized at %s", DATABASE_PATH)

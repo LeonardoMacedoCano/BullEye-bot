@@ -5,7 +5,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 _FEAR_GREED_URL = "https://api.alternative.me/fng/?limit=1"
-_CACHE_TTL = 1800  # 30 minutes
+_CACHE_TTL = 1800
 
 _cached: dict | None = None
 _cached_at: float = 0.0
