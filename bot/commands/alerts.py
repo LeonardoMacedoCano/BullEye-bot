@@ -2,6 +2,7 @@ import logging
 from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, add_alert, ticker_exists
+from bot.services.market import normalize_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +13,7 @@ class AlertsCog(commands.Cog):
 
     @commands.command(name="alert")
     async def alert(self, ctx: commands.Context, ticker: str, price: str) -> None:
-        ticker = ticker.upper()
+        ticker = normalize_ticker(ticker)
 
         try:
             target_price = float(price)

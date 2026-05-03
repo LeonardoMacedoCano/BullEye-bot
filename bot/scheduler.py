@@ -6,7 +6,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import discord
 
-from bot.db.repository import get_active_alerts, deactivate_alert, get_all_active_schedules
+from bot.db.repository import (
+    get_active_alerts, deactivate_alert,
+    get_all_active_schedules, update_last_sent_date,
+)
 from bot.services.market import get_ticker_data
 from bot.commands.summary import build_summary
 
@@ -26,11 +29,13 @@ async def scheduler_loop(bot: discord.Client) -> None:
 
     while not bot.is_closed():
         await asyncio.sleep(60)
-        now = datetime.now(_TZ).strftime("%H:%M")
-        logger.debug("Scheduler tick at %s", now)
+        now = datetime.now(_TZ)
+        now_str   = now.strftime("%H:%M")
+        today_str = now.strftime("%Y-%m-%d")
+        logger.debug("Scheduler tick at %s", now_str)
 
         await _check_alerts(bot)
-        await _check_schedules(bot, now)
+        await _check_schedules(bot, now_str, today_str)
 
 
 async def _check_alerts(bot: discord.Client) -> None:
@@ -56,15 +61,18 @@ async def _check_alerts(bot: discord.Client) -> None:
                 logger.error("Failed to send alert DM to user %s: %s", alert["discord_id"], exc)
 
 
-async def _check_schedules(bot: discord.Client, now: str) -> None:
+async def _check_schedules(bot: discord.Client, now: str, today: str) -> None:
     schedules = get_all_active_schedules()
     for schedule in schedules:
+        if schedule["last_sent_date"] == today:
+            continue  # already sent today
         if schedule["time"] != now:
-            continue
+            continue  # not the scheduled time
         try:
             user = await bot.fetch_user(int(schedule["discord_id"]))
             for msg in build_summary(schedule["user_id"], user.mention):
                 await user.send(msg)
+            update_last_sent_date(schedule["user_id"], today)
             logger.info("Daily summary sent to user %s at %s", schedule["discord_id"], now)
         except Exception as exc:
             logger.error(

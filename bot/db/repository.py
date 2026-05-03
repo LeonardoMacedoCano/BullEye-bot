@@ -218,15 +218,13 @@ def get_ticker_cache(ticker: str) -> sqlite3.Row | None:
         conn.close()
 
 
-def set_ticker_cache(
-    ticker: str, dy_rate: float, dy_yield: float, eps: float, book_value: float
-) -> None:
+def set_ticker_cache(ticker: str, dy_rate: float, dy_yield: float) -> None:
     conn = get_connection()
     try:
         conn.execute(
-            "INSERT OR REPLACE INTO ticker_cache (ticker, dy_rate, dy_yield, eps, book_value, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (ticker.upper(), dy_rate, dy_yield, eps, book_value, int(time.time())),
+            "INSERT OR REPLACE INTO ticker_cache (ticker, dy_rate, dy_yield, updated_at) "
+            "VALUES (?, ?, ?, ?)",
+            (ticker.upper(), dy_rate, dy_yield, int(time.time())),
         )
         conn.commit()
     finally:
@@ -241,5 +239,17 @@ def get_all_active_schedules() -> list[sqlite3.Row]:
             "WHERE s.active = 1"
         )
         return cursor.fetchall()
+    finally:
+        conn.close()
+
+
+def update_last_sent_date(user_id: int, date_str: str) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE schedules SET last_sent_date = ? WHERE user_id = ? AND active = 1",
+            (date_str, user_id),
+        )
+        conn.commit()
     finally:
         conn.close()

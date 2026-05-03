@@ -23,7 +23,7 @@ def _group_tickers(rows) -> list[tuple[str | None, list[str]]]:
     ordered = []
     for key in SUBCATEGORY_ORDER:
         if key in groups:
-            ordered.append((SUBCATEGORY_LABELS[key], groups[key]))
+            ordered.append((SUBCATEGORY_LABELS.get(key, key), groups[key]))
     for key, vals in groups.items():
         if key is not None and key not in SUBCATEGORY_ORDER:
             ordered.append((key, vals))
