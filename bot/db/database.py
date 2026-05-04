@@ -26,18 +26,25 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS tickers (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol      TEXT    UNIQUE NOT NULL,
+                subcategory TEXT    DEFAULT NULL,
+                quote_type  TEXT    DEFAULT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS user_tickers (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id      INTEGER NOT NULL REFERENCES users(id),
-                ticker       TEXT    NOT NULL,
+                ticker_id    INTEGER NOT NULL REFERENCES tickers(id),
                 category     TEXT    NOT NULL CHECK(category IN ('wallet', 'watchlist')),
-                subcategory  TEXT    DEFAULT NULL,
-                user_ceiling REAL    DEFAULT NULL
+                user_ceiling REAL    DEFAULT NULL,
+                UNIQUE(user_id, ticker_id)
             );
 
             CREATE TABLE IF NOT EXISTS alerts (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id      INTEGER NOT NULL REFERENCES users(id),
-                ticker       TEXT    NOT NULL,
+                ticker_id    INTEGER NOT NULL REFERENCES tickers(id),
                 target_price REAL    NOT NULL,
                 active       INTEGER NOT NULL DEFAULT 1
             );
@@ -50,14 +57,23 @@ def init_db() -> None:
                 last_sent_date TEXT    DEFAULT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS ticker_cache (
-                ticker           TEXT    PRIMARY KEY,
-                dy_rate          REAL,
-                dy_yield         REAL,
-                ex_dividend_date TEXT    DEFAULT NULL,
-                pay_date         TEXT    DEFAULT NULL,
-                dividend_amount  REAL    DEFAULT NULL,
-                updated_at       INTEGER NOT NULL
+            CREATE TABLE IF NOT EXISTS ticker_price_cache (
+                ticker_id  INTEGER PRIMARY KEY REFERENCES tickers(id),
+                dy_rate    REAL,
+                dy_yield   REAL,
+                updated_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS proventos (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticker_id   INTEGER NOT NULL REFERENCES tickers(id),
+                ex_date     TEXT    NOT NULL,
+                pay_date    TEXT    DEFAULT NULL,
+                amount      REAL    DEFAULT NULL,
+                type        TEXT    DEFAULT NULL,
+                description TEXT    DEFAULT NULL,
+                updated_at  INTEGER NOT NULL,
+                UNIQUE(ticker_id, ex_date, type)
             );
         """)
         logger.info("Database initialized at %s", DATABASE_PATH)

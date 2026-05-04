@@ -24,7 +24,9 @@ class HelpCog(commands.Cog):
             f"`{p}schedule` — Show your current schedule",
             f"`{p}unschedule` — Cancel your daily summary",
             f"`{p}summary` — Get your current summary",
-            f"`{p}dividends` — Show upcoming dividends (next 60 days)",
+            f"`{p}dividends` — Show upcoming proventos (next 60 days) with type, ex-date, pay-date and amount",
+            f"`{p}refreshcache` — Clear and re-fetch all data caches (prices, proventos, Fear & Greed)",
+            f"`{p}resetdb` — **(dev)** Drop all tables and recreate schema (requires `ENABLE_RESETDB=1`)",
             f"`{p}help` — Show this message",
             "\n**Ticker tips:** Brazilian B3 stocks auto-format (`PETR4` → `PETR4.SA`). `BTC` auto-formats to `BTC-USD`.",
         ]

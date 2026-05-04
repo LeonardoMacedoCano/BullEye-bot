@@ -5,7 +5,7 @@ from discord.ext import commands
 from bot.utils import safe_defer
 
 from bot.db.repository import (
-    get_or_create_user, list_tickers, update_ticker_subcategory, get_upcoming_dividends,
+    get_or_create_user, list_tickers, update_ticker_subcategory, get_proventos_upcoming,
 )
 from bot.services.market import (
     get_ticker_data, get_ticker_subcategory, get_br_stock_metrics, get_dividend_info,
@@ -46,8 +46,16 @@ def _fmt_ceiling(ceiling: float | None, current_price: float, sym: str) -> str:
     return f"{sym}{ceiling:,.2f} {sign}{m:.0f}%"
 
 
-def _render_table(headers: list[str], rows: list[list[str]]) -> str:
-    active = [i for i in range(len(headers)) if any(r[i] != "—" for r in rows)]
+def _render_table(
+    headers: list[str],
+    rows: list[list[str]],
+    required_headers: list[str] | None = None,
+) -> str:
+    required = set(required_headers or [])
+    active = [
+        i for i in range(len(headers))
+        if headers[i] in required or any(r[i] != "—" for r in rows)
+    ]
     if not active:
         return ""
     widths = [
@@ -296,7 +304,7 @@ def _build_performance(wallet: list, watchlist: list) -> list[str]:
     return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
 
 
-def _build_dividends_radar(tickers: list) -> list[str]:
+def _build_proventos_radar(tickers: list) -> list[str]:
     for row in tickers:
         ticker = row["ticker"]
         if ticker.upper().endswith(".SA"):
@@ -307,29 +315,30 @@ def _build_dividends_radar(tickers: list) -> list[str]:
             get_dividend_info(ticker)
 
     ticker_names = [row["ticker"] for row in tickers]
-    db_rows = get_upcoming_dividends(ticker_names)
+    db_rows = get_proventos_upcoming(ticker_names)
     if not db_rows:
         return []
 
     def _fmt_date(d: str | None) -> str:
         return d.replace("-", "/") if d else "—"
 
-    headers = ["Ticker", "Ex-Date", "Pay-Date", "Amount"]
+    headers = ["Ticker", "Ex-Date", "Pay-Date", "Tipo", "Valor"]
     data_rows: list[list[str]] = []
     for row in db_rows:
-        ticker = row["ticker"]
+        ticker = row["symbol"]
         sym = _currency(ticker)
         name = _display_name(ticker)
-        ex_d = _fmt_date(row["ex_dividend_date"])
+        ex_d = _fmt_date(row["ex_date"])
         pay_d = _fmt_date(row["pay_date"])
-        div_amount = row["dividend_amount"]
-        amt_str = f"{sym}{div_amount:,.2f}" if div_amount else "—"
-        data_rows.append([name, ex_d, pay_d, amt_str])
+        ptype = row["type"] or "—"
+        amount = row["amount"]
+        amt_str = f"{sym}{amount:,.2f}" if amount else "—"
+        data_rows.append([name, ex_d, pay_d, ptype, amt_str])
 
-    table_str = _render_table(headers, data_rows)
+    table_str = _render_table(headers, data_rows, required_headers=["Pay-Date", "Tipo"])
     if not table_str:
         return []
-    msg = f"# 📅 Upcoming Dividends\n```\n{table_str}\n```"
+    msg = f"# 📅 Proventos\n```\n{table_str}\n```"
     return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
 
 
@@ -398,7 +407,7 @@ def build_summary(user_id: int, discord_mention: str) -> list[str]:
         sections.extend(_build_section("👀 Watchlist", watchlist))
     sections.extend(_build_market_indicators(has_btc, fg))
     sections.extend(_build_performance(wallet, watchlist))
-    sections.extend(_build_dividends_radar(tickers))
+    sections.extend(_build_proventos_radar(tickers))
     sections.extend(_build_opportunities(tickers))
 
     if not sections:

@@ -4,6 +4,7 @@ import os
 import sys
 
 import discord
+import discord.app_commands as app_commands
 from discord.errors import PrivilegedIntentsRequired
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -33,7 +34,9 @@ COGS = [
     "bot.commands.summary",
     "bot.commands.ceiling_cmd",
     "bot.commands.dividends_cmd",
+    "bot.commands.cache_cmd",
     "bot.commands.help_cmd",
+    "bot.commands.resetdb_cmd",
 ]
 
 intents = discord.Intents.default()
@@ -41,6 +44,37 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 bot.heavy_semaphore = asyncio.Semaphore(3)
+
+
+@bot.tree.error
+async def on_app_command_error(
+    interaction: discord.Interaction,
+    error: app_commands.AppCommandError,
+) -> None:
+    cause = error
+    while hasattr(cause, "original"):
+        cause = cause.original
+
+    if isinstance(cause, discord.NotFound) and cause.code == 10062:
+        logger.warning(
+            "App command '%s' received stale interaction (10062)",
+            interaction.command.name if interaction.command else "?",
+        )
+        return
+
+    logger.error(
+        "App command '%s' failed: %s",
+        interaction.command.name if interaction.command else "?",
+        cause,
+        exc_info=cause,
+    )
+    if not interaction.response.is_done():
+        try:
+            await interaction.response.send_message(
+                "❌ Erro inesperado. Tente novamente.", ephemeral=True
+            )
+        except Exception:
+            pass
 
 
 @bot.event
@@ -73,7 +107,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError) 
         )
         try:
             await ctx.channel.send(
-                f"{ctx.author.mention} ⚠️ Sua interação expirou. Tente o comando novamente.",
+                f"{ctx.author.mention} ⚠️ Your interaction expired. Please try the command again.",
                 delete_after=8,
             )
         except Exception:

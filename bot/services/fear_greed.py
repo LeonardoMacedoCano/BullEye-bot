@@ -13,6 +13,13 @@ _cached_at: float = 0.0
 _cache_lock = threading.Lock()
 
 
+def clear_fear_greed_cache() -> None:
+    global _cached, _cached_at
+    with _cache_lock:
+        _cached = None
+        _cached_at = 0.0
+
+
 def get_fear_greed_index() -> dict | None:
     global _cached, _cached_at
     with _cache_lock:

@@ -44,7 +44,7 @@ class CeilingCog(commands.Cog):
                 data = await loop.run_in_executor(None, get_ticker_data, ticker)
             except Exception:
                 logger.exception("Error fetching data for %s", ticker)
-                await ctx.send(f"{ctx.author.mention} ❌ Erro ao buscar preço. Tente novamente.")
+                await ctx.send(f"{ctx.author.mention} ❌ Error fetching price. Please try again.")
                 return
             if data:
                 price = data["current_price"]

@@ -15,12 +15,37 @@ def get_or_create_user(discord_id: str) -> sqlite3.Row:
         conn.close()
 
 
+def upsert_ticker(symbol: str, subcategory: str | None = None, quote_type: str | None = None) -> int:
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO tickers (symbol, subcategory, quote_type) VALUES (?, ?, ?) "
+            "ON CONFLICT(symbol) DO UPDATE SET "
+            "subcategory = COALESCE(excluded.subcategory, subcategory), "
+            "quote_type = COALESCE(excluded.quote_type, quote_type)",
+            (symbol.upper(), subcategory, quote_type),
+        )
+        conn.commit()
+        row = conn.execute("SELECT id FROM tickers WHERE symbol = ?", (symbol.upper(),)).fetchone()
+        return row["id"]
+    finally:
+        conn.close()
+
+
 def add_ticker(user_id: int, ticker: str, category: str, subcategory: str | None = None) -> None:
     conn = get_connection()
     try:
         conn.execute(
-            "INSERT INTO tickers (user_id, ticker, category, subcategory) VALUES (?, ?, ?, ?)",
-            (user_id, ticker.upper(), category, subcategory),
+            "INSERT INTO tickers (symbol, subcategory) VALUES (?, ?) "
+            "ON CONFLICT(symbol) DO UPDATE SET "
+            "subcategory = COALESCE(excluded.subcategory, subcategory)",
+            (ticker.upper(), subcategory),
+        )
+        conn.commit()
+        t_row = conn.execute("SELECT id FROM tickers WHERE symbol = ?", (ticker.upper(),)).fetchone()
+        conn.execute(
+            "INSERT OR IGNORE INTO user_tickers (user_id, ticker_id, category) VALUES (?, ?, ?)",
+            (user_id, t_row["id"], category),
         )
         conn.commit()
     finally:
@@ -31,16 +56,23 @@ def remove_ticker(user_id: int, ticker: str) -> int:
     conn = get_connection()
     try:
         cursor = conn.cursor()
+        t_row = cursor.execute(
+            "SELECT id FROM tickers WHERE symbol = ?", (ticker.upper(),)
+        ).fetchone()
+        if not t_row:
+            return 0
+        ticker_id = t_row["id"]
         cursor.execute(
-            "DELETE FROM tickers WHERE user_id = ? AND ticker = ?",
-            (user_id, ticker.upper()),
+            "DELETE FROM user_tickers WHERE user_id = ? AND ticker_id = ?",
+            (user_id, ticker_id),
         )
-        conn.execute(
-            "UPDATE alerts SET active = 0 WHERE user_id = ? AND ticker = ?",
-            (user_id, ticker.upper()),
+        count = cursor.rowcount
+        cursor.execute(
+            "UPDATE alerts SET active = 0 WHERE user_id = ? AND ticker_id = ?",
+            (user_id, ticker_id),
         )
         conn.commit()
-        return cursor.rowcount
+        return count
     finally:
         conn.close()
 
@@ -49,7 +81,9 @@ def list_tickers(user_id: int) -> list[sqlite3.Row]:
     conn = get_connection()
     try:
         cursor = conn.execute(
-            "SELECT * FROM tickers WHERE user_id = ? ORDER BY category, ticker",
+            "SELECT t.symbol AS ticker, ut.category, t.subcategory, ut.user_ceiling "
+            "FROM user_tickers ut JOIN tickers t ON ut.ticker_id = t.id "
+            "WHERE ut.user_id = ? ORDER BY ut.category, t.symbol",
             (user_id,),
         )
         return cursor.fetchall()
@@ -61,7 +95,9 @@ def get_ticker_row(user_id: int, ticker: str) -> sqlite3.Row | None:
     conn = get_connection()
     try:
         cursor = conn.execute(
-            "SELECT * FROM tickers WHERE user_id = ? AND ticker = ?",
+            "SELECT t.symbol AS ticker, ut.category, t.subcategory, ut.user_ceiling "
+            "FROM user_tickers ut JOIN tickers t ON ut.ticker_id = t.id "
+            "WHERE ut.user_id = ? AND t.symbol = ?",
             (user_id, ticker.upper()),
         )
         return cursor.fetchone()
@@ -73,7 +109,8 @@ def set_user_ceiling(user_id: int, ticker: str, ceiling: float) -> None:
     conn = get_connection()
     try:
         conn.execute(
-            "UPDATE tickers SET user_ceiling = ? WHERE user_id = ? AND ticker = ?",
+            "UPDATE user_tickers SET user_ceiling = ? "
+            "WHERE user_id = ? AND ticker_id = (SELECT id FROM tickers WHERE symbol = ?)",
             (ceiling, user_id, ticker.upper()),
         )
         conn.commit()
@@ -85,7 +122,8 @@ def clear_user_ceiling(user_id: int, ticker: str) -> None:
     conn = get_connection()
     try:
         conn.execute(
-            "UPDATE tickers SET user_ceiling = NULL WHERE user_id = ? AND ticker = ?",
+            "UPDATE user_tickers SET user_ceiling = NULL "
+            "WHERE user_id = ? AND ticker_id = (SELECT id FROM tickers WHERE symbol = ?)",
             (user_id, ticker.upper()),
         )
         conn.commit()
@@ -97,8 +135,8 @@ def update_ticker_subcategory(user_id: int, ticker: str, subcategory: str | None
     conn = get_connection()
     try:
         conn.execute(
-            "UPDATE tickers SET subcategory = ? WHERE user_id = ? AND ticker = ?",
-            (subcategory, user_id, ticker.upper()),
+            "UPDATE tickers SET subcategory = ? WHERE symbol = ?",
+            (subcategory, ticker.upper()),
         )
         conn.commit()
     finally:
@@ -109,7 +147,8 @@ def get_ticker_category(user_id: int, ticker: str) -> str | None:
     conn = get_connection()
     try:
         cursor = conn.execute(
-            "SELECT category FROM tickers WHERE user_id = ? AND ticker = ?",
+            "SELECT ut.category FROM user_tickers ut JOIN tickers t ON ut.ticker_id = t.id "
+            "WHERE ut.user_id = ? AND t.symbol = ?",
             (user_id, ticker.upper()),
         )
         row = cursor.fetchone()
@@ -122,7 +161,8 @@ def ticker_exists(user_id: int, ticker: str) -> bool:
     conn = get_connection()
     try:
         cursor = conn.execute(
-            "SELECT 1 FROM tickers WHERE user_id = ? AND ticker = ?",
+            "SELECT 1 FROM user_tickers ut JOIN tickers t ON ut.ticker_id = t.id "
+            "WHERE ut.user_id = ? AND t.symbol = ?",
             (user_id, ticker.upper()),
         )
         return cursor.fetchone() is not None
@@ -133,9 +173,14 @@ def ticker_exists(user_id: int, ticker: str) -> bool:
 def add_alert(user_id: int, ticker: str, target_price: float) -> None:
     conn = get_connection()
     try:
+        t_row = conn.execute(
+            "SELECT id FROM tickers WHERE symbol = ?", (ticker.upper(),)
+        ).fetchone()
+        if not t_row:
+            return
         conn.execute(
-            "INSERT INTO alerts (user_id, ticker, target_price) VALUES (?, ?, ?)",
-            (user_id, ticker.upper(), target_price),
+            "INSERT INTO alerts (user_id, ticker_id, target_price) VALUES (?, ?, ?)",
+            (user_id, t_row["id"], target_price),
         )
         conn.commit()
     finally:
@@ -147,13 +192,17 @@ def get_active_alerts(user_id: int | None = None) -> list[sqlite3.Row]:
     try:
         if user_id is not None:
             cursor = conn.execute(
-                "SELECT a.*, u.discord_id FROM alerts a JOIN users u ON a.user_id = u.id "
+                "SELECT a.*, u.discord_id, t.symbol AS ticker "
+                "FROM alerts a JOIN users u ON a.user_id = u.id "
+                "JOIN tickers t ON a.ticker_id = t.id "
                 "WHERE a.active = 1 AND a.user_id = ?",
                 (user_id,),
             )
         else:
             cursor = conn.execute(
-                "SELECT a.*, u.discord_id FROM alerts a JOIN users u ON a.user_id = u.id "
+                "SELECT a.*, u.discord_id, t.symbol AS ticker "
+                "FROM alerts a JOIN users u ON a.user_id = u.id "
+                "JOIN tickers t ON a.ticker_id = t.id "
                 "WHERE a.active = 1"
             )
         return cursor.fetchall()
@@ -207,38 +256,6 @@ def deactivate_schedule(user_id: int) -> int:
         conn.close()
 
 
-def get_ticker_cache(ticker: str) -> sqlite3.Row | None:
-    conn = get_connection()
-    try:
-        cursor = conn.execute(
-            "SELECT * FROM ticker_cache WHERE ticker = ?", (ticker.upper(),)
-        )
-        return cursor.fetchone()
-    finally:
-        conn.close()
-
-
-def set_ticker_cache(
-    ticker: str,
-    dy_rate: float,
-    dy_yield: float,
-    ex_dividend_date: str | None = None,
-    pay_date: str | None = None,
-    dividend_amount: float | None = None,
-) -> None:
-    conn = get_connection()
-    try:
-        conn.execute(
-            "INSERT OR REPLACE INTO ticker_cache "
-            "(ticker, dy_rate, dy_yield, ex_dividend_date, pay_date, dividend_amount, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (ticker.upper(), dy_rate, dy_yield, ex_dividend_date, pay_date, dividend_amount, int(time.time())),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-
 def get_all_active_schedules() -> list[sqlite3.Row]:
     conn = get_connection()
     try:
@@ -263,21 +280,109 @@ def update_last_sent_date(user_id: int, date_str: str) -> None:
         conn.close()
 
 
-def get_upcoming_dividends(tickers: list[str], days: int = 60) -> list[sqlite3.Row]:
+def get_price_cache(ticker: str) -> sqlite3.Row | None:
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            "SELECT pc.* FROM ticker_price_cache pc JOIN tickers t ON pc.ticker_id = t.id "
+            "WHERE t.symbol = ?",
+            (ticker.upper(),),
+        )
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+
+def set_price_cache(ticker: str, dy_rate: float, dy_yield: float) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO tickers (symbol) VALUES (?)", (ticker.upper(),)
+        )
+        conn.commit()
+        t_row = conn.execute("SELECT id FROM tickers WHERE symbol = ?", (ticker.upper(),)).fetchone()
+        conn.execute(
+            "INSERT OR REPLACE INTO ticker_price_cache (ticker_id, dy_rate, dy_yield, updated_at) "
+            "VALUES (?, ?, ?, ?)",
+            (t_row["id"], dy_rate, dy_yield, int(time.time())),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def clear_price_cache_db() -> int:
+    conn = get_connection()
+    try:
+        cursor = conn.execute("DELETE FROM ticker_price_cache")
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()
+
+
+def upsert_provento(
+    ticker_id: int,
+    ex_date: str,
+    pay_date: str | None,
+    amount: float | None,
+    ptype: str | None,
+    description: str | None,
+) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO proventos (ticker_id, ex_date, pay_date, amount, type, description, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(ticker_id, ex_date, type) DO UPDATE SET "
+            "pay_date = excluded.pay_date, amount = excluded.amount, "
+            "description = excluded.description, updated_at = excluded.updated_at",
+            (ticker_id, ex_date, pay_date, amount, ptype, description, int(time.time())),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_proventos_for_ticker(ticker_id: int) -> list[sqlite3.Row]:
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            "SELECT * FROM proventos WHERE ticker_id = ? ORDER BY ex_date DESC LIMIT 10",
+            (ticker_id,),
+        )
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+
+def clear_proventos_db() -> int:
+    conn = get_connection()
+    try:
+        cursor = conn.execute("DELETE FROM proventos")
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()
+
+
+def get_proventos_upcoming(symbols: list[str], days: int = 60) -> list[sqlite3.Row]:
     from datetime import date, timedelta
     today = date.today().isoformat()
     limit = (date.today() + timedelta(days=days)).isoformat()
-    upper = [t.upper() for t in tickers]
+    upper = [s.upper() for s in symbols]
     if not upper:
         return []
     placeholders = ",".join("?" * len(upper))
     conn = get_connection()
     try:
         cursor = conn.execute(
-            f"SELECT * FROM ticker_cache WHERE ticker IN ({placeholders}) "
-            "AND ex_dividend_date IS NOT NULL "
-            "AND ex_dividend_date >= ? AND ex_dividend_date <= ? "
-            "ORDER BY ex_dividend_date",
+            f"SELECT t.symbol, p.ex_date, p.pay_date, p.amount, p.type "
+            f"FROM proventos p JOIN tickers t ON p.ticker_id = t.id "
+            f"WHERE t.symbol IN ({placeholders}) "
+            f"AND p.ex_date IS NOT NULL "
+            f"AND p.ex_date >= ? AND p.ex_date <= ? "
+            f"ORDER BY p.ex_date, t.symbol",
             (*upper, today, limit),
         )
         return cursor.fetchall()

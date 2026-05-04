@@ -8,6 +8,7 @@ services:
       - DATABASE_PATH=${DATABASE_PATH:-/data/bot.db}
       - PREFIX=${PREFIX:-!}
       - TIMEZONE=${TIMEZONE:-UTC}
+      - ENABLE_RESETDB=${ENABLE_RESETDB:-}
     volumes:
       - bot_data:/data
     restart: unless-stopped

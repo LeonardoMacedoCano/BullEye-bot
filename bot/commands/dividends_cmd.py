@@ -3,7 +3,7 @@ import logging
 from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, list_tickers
-from bot.commands.summary import _build_dividends_radar
+from bot.commands.summary import _build_proventos_radar
 from bot.utils import safe_defer
 
 logger = logging.getLogger(__name__)
@@ -28,14 +28,14 @@ class DividendsCog(commands.Cog):
         async with self.bot.heavy_semaphore:
             try:
                 loop = asyncio.get_event_loop()
-                messages = await loop.run_in_executor(None, _build_dividends_radar, list(tickers))
+                messages = await loop.run_in_executor(None, _build_proventos_radar, list(tickers))
             except Exception:
                 logger.exception("Error in dividends for user %s", ctx.author.id)
-                await ctx.send(f"{ctx.author.mention} ❌ Erro ao buscar dividendos. Tente novamente.")
+                await ctx.send(f"{ctx.author.mention} ❌ Erro ao buscar proventos. Tente novamente.")
                 return
 
         if not messages:
-            await ctx.send(f"{ctx.author.mention} No upcoming dividends in the next 60 days.")
+            await ctx.send(f"{ctx.author.mention} No upcoming proventos in the next 60 days.")
             return
 
         messages[0] = f"{ctx.author.mention} " + messages[0]
