@@ -19,14 +19,14 @@ class CeilingCog(commands.Cog):
 
     @commands.hybrid_command(name="ceiling")
     async def ceiling(self, ctx: commands.Context, ticker: str, value: str = None) -> None:
-        if not await safe_defer(ctx):
-            return
+        send = await safe_defer(ctx)
         original = ticker.upper().strip()
         ticker = normalize_ticker(original)
-        user = get_or_create_user(str(ctx.author.id))
+        loop = asyncio.get_running_loop()
+        user = await loop.run_in_executor(None, get_or_create_user, str(ctx.author.id))
 
-        if not get_ticker_category(user["id"], ticker):
-            await ctx.send(
+        if not await loop.run_in_executor(None, get_ticker_category, user["id"], ticker):
+            await send(
                 f"{ctx.author.mention} `{ticker}` is not in your list. Add it first with `!add`."
             )
             return
@@ -34,34 +34,33 @@ class CeilingCog(commands.Cog):
         sym = _sym(ticker)
 
         if value is None:
-            row = get_ticker_row(user["id"], ticker)
+            row = await loop.run_in_executor(None, get_ticker_row, user["id"], ticker)
             user_ceiling = row["user_ceiling"] if row else None
             if user_ceiling is None:
-                await ctx.send(f"{ctx.author.mention} No ceiling set for `{ticker}`.")
+                await send(f"{ctx.author.mention} No ceiling set for `{ticker}`.")
                 return
             try:
-                loop = asyncio.get_event_loop()
                 data = await loop.run_in_executor(None, get_ticker_data, ticker)
             except Exception:
                 logger.exception("Error fetching data for %s", ticker)
-                await ctx.send(f"{ctx.author.mention} ❌ Error fetching price. Please try again.")
+                await send(f"{ctx.author.mention} ❌ Error fetching price. Please try again.")
                 return
             if data:
                 price = data["current_price"]
                 margin = (user_ceiling - price) / price * 100
                 sign = "+" if margin >= 0 else ""
                 status = "below ceiling" if margin >= 0 else "above ceiling"
-                await ctx.send(
+                await send(
                     f"{ctx.author.mention} `{ticker}` ceiling: {sym}{user_ceiling:,.2f} — "
                     f"Current: {sym}{price:,.2f} ({sign}{margin:.1f}% {status})"
                 )
             else:
-                await ctx.send(f"{ctx.author.mention} `{ticker}` ceiling: {sym}{user_ceiling:,.2f}")
+                await send(f"{ctx.author.mention} `{ticker}` ceiling: {sym}{user_ceiling:,.2f}")
             return
 
         if value.lower() == "clear":
-            clear_user_ceiling(user["id"], ticker)
-            await ctx.send(f"{ctx.author.mention} Ceiling removed for `{ticker}`.")
+            await loop.run_in_executor(None, clear_user_ceiling, user["id"], ticker)
+            await send(f"{ctx.author.mention} Ceiling removed for `{ticker}`.")
             logger.info("User %s cleared ceiling for %s", ctx.author.id, ticker)
             return
 
@@ -70,13 +69,13 @@ class CeilingCog(commands.Cog):
             if ceiling_val <= 0:
                 raise ValueError
         except ValueError:
-            await ctx.send(
+            await send(
                 f"{ctx.author.mention} Invalid price `{value}`. Use a positive number or `clear`."
             )
             return
 
-        set_user_ceiling(user["id"], ticker, ceiling_val)
-        await ctx.send(f"{ctx.author.mention} Ceiling set: `{ticker}` ≤ {sym}{ceiling_val:,.2f}.")
+        await loop.run_in_executor(None, set_user_ceiling, user["id"], ticker, ceiling_val)
+        await send(f"{ctx.author.mention} Ceiling set: `{ticker}` ≤ {sym}{ceiling_val:,.2f}.")
         logger.info("User %s set ceiling for %s to %.2f", ctx.author.id, ticker, ceiling_val)
 
 

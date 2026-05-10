@@ -15,32 +15,39 @@ class DividendsCog(commands.Cog):
 
     @commands.hybrid_command(name="dividends")
     async def dividends(self, ctx: commands.Context) -> None:
-        if not await safe_defer(ctx):
-            return
-        user = get_or_create_user(str(ctx.author.id))
-        tickers = list_tickers(user["id"])
+        send = await safe_defer(ctx)
+        loop = asyncio.get_running_loop()
+        user = await loop.run_in_executor(None, get_or_create_user, str(ctx.author.id))
+        tickers = await loop.run_in_executor(None, list_tickers, user["id"])
         if not tickers:
-            await ctx.send(
+            await send(
                 f"{ctx.author.mention} You have no tickers configured. Use `!add <TICKER>` to get started."
             )
             return
 
         async with self.bot.heavy_semaphore:
             try:
-                loop = asyncio.get_event_loop()
-                messages = await loop.run_in_executor(None, _build_proventos_radar, list(tickers))
+                messages = await asyncio.wait_for(
+                    asyncio.get_running_loop().run_in_executor(
+                        None, _build_proventos_radar, list(tickers)
+                    ),
+                    timeout=60.0,
+                )
+            except asyncio.TimeoutError:
+                await send(f"{ctx.author.mention} ❌ Dividends lookup timed out. Please try again.")
+                return
             except Exception:
                 logger.exception("Error in dividends for user %s", ctx.author.id)
-                await ctx.send(f"{ctx.author.mention} ❌ Erro ao buscar proventos. Tente novamente.")
+                await send(f"{ctx.author.mention} ❌ Error fetching dividends. Please try again.")
                 return
 
         if not messages:
-            await ctx.send(f"{ctx.author.mention} No upcoming proventos in the next 60 days.")
+            await send(f"{ctx.author.mention} No upcoming dividends in the next 60 days.")
             return
 
         messages[0] = f"{ctx.author.mention} " + messages[0]
         for msg in messages:
-            await ctx.send(msg)
+            await send(msg)
         logger.info("Dividends sent to user %s", ctx.author.id)
 
 

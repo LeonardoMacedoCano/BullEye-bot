@@ -48,11 +48,10 @@ class CacheCog(commands.Cog):
 
     @commands.hybrid_command(name="refreshcache")
     async def refreshcache(self, ctx: commands.Context) -> None:
-        if not await safe_defer(ctx):
-            return
-        user = get_or_create_user(str(ctx.author.id))
+        send = await safe_defer(ctx)
+        loop = asyncio.get_running_loop()
+        user = await loop.run_in_executor(None, get_or_create_user, str(ctx.author.id))
         try:
-            loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, _refresh_all, user["id"])
             lines = [
                 f"{ctx.author.mention} ✅ Cache refreshed successfully!\n",
@@ -61,10 +60,10 @@ class CacheCog(commands.Cog):
             if result["failed"] > 0:
                 lines.append(f"- **{result['failed']}** tickers failed (check logs)")
             lines.append("\nAll data is fresh now.")
-            await ctx.send("\n".join(lines))
+            await send("\n".join(lines))
         except Exception:
             logger.exception("Error in refreshcache for user %s", ctx.author.id)
-            await ctx.send(f"{ctx.author.mention} ❌ Error refreshing cache. Please try again.")
+            await send(f"{ctx.author.mention} ❌ Error refreshing cache. Please try again.")
         logger.info("Cache refreshed by user %s", ctx.author.id)
 
 

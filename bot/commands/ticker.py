@@ -41,10 +41,9 @@ class TickerCog(commands.Cog):
 
     @commands.hybrid_command(name="add")
     async def add(self, ctx: commands.Context, ticker: str, category: Literal["wallet", "watchlist"] = "watchlist") -> None:
-        if not await safe_defer(ctx):
-            return
+        send = await safe_defer(ctx)
         if category not in VALID_CATEGORIES:
-            await ctx.send(
+            await send(
                 f"{ctx.author.mention} Invalid category `{category}`. Use `wallet` or `watchlist`."
             )
             return
@@ -57,62 +56,64 @@ class TickerCog(commands.Cog):
             subcategory = get_ticker_subcategory(ticker) if valid else None
             return valid, subcategory
 
+        loop = asyncio.get_running_loop()
         try:
-            loop = asyncio.get_event_loop()
             valid, subcategory = await loop.run_in_executor(None, _validate)
         except Exception:
             logger.exception("Error validating ticker %s", ticker)
-            await ctx.send(f"{ctx.author.mention} ❌ Erro ao validar o ticker. Tente novamente.")
+            await send(f"{ctx.author.mention} ❌ Error validating ticker. Please try again.")
             return
 
         if not valid:
-            await ctx.send(
-                f"{ctx.author.mention} Ticker `{ticker}` not found."
-            )
+            await send(f"{ctx.author.mention} Ticker `{ticker}` not found.")
             return
 
-        user = get_or_create_user(str(ctx.author.id))
-        existing = get_ticker_category(user["id"], ticker)
+        user = await loop.run_in_executor(None, get_or_create_user, str(ctx.author.id))
+        existing = await loop.run_in_executor(None, get_ticker_category, user["id"], ticker)
         if existing == category:
-            await ctx.send(f"{ctx.author.mention} `{ticker}` is already in your **{category}**.")
+            await send(f"{ctx.author.mention} `{ticker}` is already in your **{category}**.")
             return
         if existing:
-            await ctx.send(
+            await send(
                 f"{ctx.author.mention} `{ticker}` is already in your **{existing}**. "
                 f"Remove it first with `!remove {ticker}`."
             )
             return
 
-        add_ticker(user["id"], ticker, category, subcategory)
+        await loop.run_in_executor(None, add_ticker, user["id"], ticker, category, subcategory)
 
         sub_label = f" ({SUBCATEGORY_LABELS[subcategory]})" if subcategory in SUBCATEGORY_LABELS else ""
         if ticker != original:
-            await ctx.send(
+            await send(
                 f"{ctx.author.mention} `{original}` interpreted as `{ticker}`. Added to **{category}**{sub_label}."
             )
         else:
-            await ctx.send(f"{ctx.author.mention} Ticker `{ticker}` added to **{category}**{sub_label}.")
+            await send(f"{ctx.author.mention} Ticker `{ticker}` added to **{category}**{sub_label}.")
         logger.info("User %s added ticker %s to %s (%s)", ctx.author.id, ticker, category, subcategory)
 
     @commands.hybrid_command(name="remove")
     async def remove(self, ctx: commands.Context, ticker: str) -> None:
+        send = await safe_defer(ctx)
         original = ticker.upper().strip()
         ticker = normalize_ticker(original)
-        user = get_or_create_user(str(ctx.author.id))
-        count = remove_ticker(user["id"], ticker)
+        loop = asyncio.get_running_loop()
+        user = await loop.run_in_executor(None, get_or_create_user, str(ctx.author.id))
+        count = await loop.run_in_executor(None, remove_ticker, user["id"], ticker)
         if count == 0:
-            await ctx.send(f"{ctx.author.mention} Ticker `{ticker}` not found in your list.")
+            await send(f"{ctx.author.mention} Ticker `{ticker}` not found in your list.")
         else:
-            await ctx.send(f"{ctx.author.mention} Ticker `{ticker}` removed.")
+            await send(f"{ctx.author.mention} Ticker `{ticker}` removed.")
             logger.info("User %s removed ticker %s", ctx.author.id, ticker)
 
     @commands.hybrid_command(name="list")
     async def list_tickers_cmd(self, ctx: commands.Context) -> None:
-        user = get_or_create_user(str(ctx.author.id))
-        tickers = list_tickers(user["id"])
+        send = await safe_defer(ctx)
+        loop = asyncio.get_running_loop()
+        user = await loop.run_in_executor(None, get_or_create_user, str(ctx.author.id))
+        tickers = await loop.run_in_executor(None, list_tickers, user["id"])
 
         if not tickers:
-            await ctx.send(
+            await send(
                 f"{ctx.author.mention} Your ticker list is empty. Use `!add <TICKER>` to add one."
             )
             return
@@ -135,7 +136,7 @@ class TickerCog(commands.Cog):
                 names = [row["ticker"] for row in cat_rows]
                 lines.append(f"**{cat_label}:** {', '.join(names)}")
 
-        await ctx.send("\n".join(lines))
+        await send("\n".join(lines))
 
 
 async def setup(bot: commands.Bot) -> None:

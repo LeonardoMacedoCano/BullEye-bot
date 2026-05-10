@@ -43,7 +43,7 @@ async def _process_alert(bot: discord.Client, loop: asyncio.AbstractEventLoop, a
     if data is None:
         return
     if data["current_price"] <= alert["target_price"]:
-        deactivate_alert(alert["id"])
+        await loop.run_in_executor(None, deactivate_alert, alert["id"])
         try:
             user = await bot.fetch_user(int(alert["discord_id"]))
             await user.send(
@@ -60,8 +60,8 @@ async def _process_alert(bot: discord.Client, loop: asyncio.AbstractEventLoop, a
 
 
 async def _check_alerts(bot: discord.Client) -> None:
-    loop = asyncio.get_event_loop()
-    alerts = get_active_alerts()
+    loop = asyncio.get_running_loop()
+    alerts = await loop.run_in_executor(None, get_active_alerts)
     if not alerts:
         return
     tasks = [_process_alert(bot, loop, alert) for alert in alerts]
@@ -74,15 +74,15 @@ async def _process_schedule(bot: discord.Client, loop: asyncio.AbstractEventLoop
         messages = await loop.run_in_executor(None, build_summary, schedule["user_id"], user.mention)
         for msg in messages:
             await user.send(msg)
-        update_last_sent_date(schedule["user_id"], today)
+        await loop.run_in_executor(None, update_last_sent_date, schedule["user_id"], today)
         logger.info("Daily summary sent to user %s", schedule["discord_id"])
     except Exception as exc:
         logger.error("Failed to send daily summary to user %s: %s", schedule["discord_id"], exc)
 
 
 async def _check_schedules(bot: discord.Client, now: str, today: str) -> None:
-    loop = asyncio.get_event_loop()
-    schedules = get_all_active_schedules()
+    loop = asyncio.get_running_loop()
+    schedules = await loop.run_in_executor(None, get_all_active_schedules)
     due = [s for s in schedules if s["last_sent_date"] != today and s["time"] == now]
     if not due:
         return

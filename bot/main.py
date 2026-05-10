@@ -46,6 +46,22 @@ bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 bot.heavy_semaphore = asyncio.Semaphore(3)
 
 
+@bot.before_invoke
+async def _auto_defer(ctx: commands.Context) -> None:
+    """Defer every slash command as early as possible — before any command code runs."""
+    if ctx.interaction is None or ctx.interaction.response.is_done():
+        return
+    try:
+        await ctx.defer()
+    except (discord.NotFound, discord.HTTPException) as exc:
+        logger.warning(
+            "_auto_defer: failed to defer command '%s' for user %s (%s)",
+            ctx.command,
+            ctx.author.id if hasattr(ctx, "author") else "?",
+            getattr(exc, "code", type(exc).__name__),
+        )
+
+
 @bot.tree.error
 async def on_app_command_error(
     interaction: discord.Interaction,
@@ -71,7 +87,7 @@ async def on_app_command_error(
     if not interaction.response.is_done():
         try:
             await interaction.response.send_message(
-                "❌ Erro inesperado. Tente novamente.", ephemeral=True
+                "❌ Unexpected error. Please try again.", ephemeral=True
             )
         except Exception:
             pass
@@ -79,8 +95,11 @@ async def on_app_command_error(
 
 @bot.event
 async def on_ready() -> None:
-    await bot.tree.sync()
     logger.info("BullEyeBot is online as %s (id: %s)", bot.user, bot.user.id)
+    if not getattr(bot, "_commands_synced", False):
+        bot._commands_synced = True
+        await bot.tree.sync()
+        logger.info("Slash commands synced.")
 
 
 def _root_cause(error: Exception) -> Exception:
@@ -116,7 +135,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError) 
 
     logger.error("Command '%s' failed: %s", ctx.command, cause, exc_info=cause)
     try:
-        await ctx.send(f"{ctx.author.mention} ❌ Erro inesperado. Tente novamente.")
+        await ctx.send(f"{ctx.author.mention} ❌ Unexpected error. Please try again.")
     except Exception:
         pass
 

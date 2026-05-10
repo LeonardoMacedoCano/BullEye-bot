@@ -322,7 +322,7 @@ def _build_proventos_radar(tickers: list) -> list[str]:
     def _fmt_date(d: str | None) -> str:
         return d.replace("-", "/") if d else "—"
 
-    headers = ["Ticker", "Ex-Date", "Pay-Date", "Tipo", "Valor"]
+    headers = ["Ticker", "Ex-Date", "Pay-Date", "Type", "Amount"]
     data_rows: list[list[str]] = []
     for row in db_rows:
         ticker = row["symbol"]
@@ -335,10 +335,10 @@ def _build_proventos_radar(tickers: list) -> list[str]:
         amt_str = f"{sym}{amount:,.2f}" if amount else "—"
         data_rows.append([name, ex_d, pay_d, ptype, amt_str])
 
-    table_str = _render_table(headers, data_rows, required_headers=["Pay-Date", "Tipo"])
+    table_str = _render_table(headers, data_rows, required_headers=["Pay-Date", "Type"])
     if not table_str:
         return []
-    msg = f"# 📅 Proventos\n```\n{table_str}\n```"
+    msg = f"# 📅 Dividends\n```\n{table_str}\n```"
     return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
 
 
@@ -424,19 +424,24 @@ class SummaryCog(commands.Cog):
 
     @commands.hybrid_command(name="summary")
     async def summary(self, ctx: commands.Context) -> None:
-        if not await safe_defer(ctx):
-            return
-        user = get_or_create_user(str(ctx.author.id))
+        send = await safe_defer(ctx)
+        user = await asyncio.get_running_loop().run_in_executor(None, get_or_create_user, str(ctx.author.id))
         async with self.bot.heavy_semaphore:
             try:
-                loop = asyncio.get_event_loop()
-                messages = await loop.run_in_executor(None, build_summary, user["id"], ctx.author.mention)
+                messages = await asyncio.wait_for(
+                    asyncio.get_running_loop().run_in_executor(
+                        None, build_summary, user["id"], ctx.author.mention
+                    ),
+                    timeout=120.0,
+                )
                 for msg in messages:
-                    await ctx.send(msg)
+                    await send(msg)
                 logger.info("Summary sent to user %s", ctx.author.id)
+            except asyncio.TimeoutError:
+                await send(f"{ctx.author.mention} ❌ Summary timed out. Please try again.")
             except Exception:
                 logger.exception("Error in summary for user %s", ctx.author.id)
-                await ctx.send(f"{ctx.author.mention} ❌ Erro ao gerar o summary. Tente novamente.")
+                await send(f"{ctx.author.mention} ❌ Error generating summary. Please try again.")
 
 
 async def setup(bot: commands.Bot) -> None:
