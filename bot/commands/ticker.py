@@ -8,14 +8,39 @@ from discord.ext import commands
 from bot.db.repository import get_or_create_user, add_ticker, remove_ticker, list_tickers, get_ticker_category
 from bot.services.market import validate_ticker, normalize_ticker, get_ticker_subcategory, SUBCATEGORY_LABELS, SUBCATEGORY_ORDER
 from bot.utils import defer, followup, mention, perf_start, perf_log
+from bot.commands.summary import _render_table
 
 logger = logging.getLogger(__name__)
 
 VALID_CATEGORIES = ("wallet", "watchlist")
+_MSG_LIMIT = 1900
 
 
-def _group_tickers(rows) -> list[tuple[str | None, list[str]]]:
-    groups: dict[str | None, list[str]] = {}
+def _display_name(ticker: str) -> str:
+    if ticker.upper() == "BTC-USD":
+        return "BTC"
+    return ticker[:-3] if ticker.upper().endswith(".SA") else ticker
+
+
+def _sym(ticker: str) -> str:
+    return "R$" if ticker.upper().endswith(".SA") else "$"
+
+
+def _fmt_price(price: float | None, ticker: str) -> str:
+    if price is None:
+        return "—"
+    sym = _sym(ticker)
+    return f"{sym}{price:,.2f}"
+
+
+def _truncate_note(note: str | None, max_len: int = 80) -> str:
+    if not note:
+        return "—"
+    return note if len(note) <= max_len else note[:max_len - 1] + "…"
+
+
+def _group_tickers_by_sub(rows: list) -> list[tuple[str | None, list]]:
+    groups: dict[str | None, list] = {}
     for row in rows:
         try:
             key = row["subcategory"]
@@ -23,18 +48,60 @@ def _group_tickers(rows) -> list[tuple[str | None, list[str]]]:
             key = None
         if key not in groups:
             groups[key] = []
-        groups[key].append(row["ticker"])
+        groups[key].append(row)
 
     ordered = []
     for key in SUBCATEGORY_ORDER:
         if key in groups:
-            ordered.append((SUBCATEGORY_LABELS.get(key, key), groups[key]))
+            ordered.append((key, groups[key]))
     for key, vals in groups.items():
         if key is not None and key not in SUBCATEGORY_ORDER:
             ordered.append((key, vals))
     if None in groups:
         ordered.append((None, groups[None]))
     return ordered
+
+
+def _build_tickers_section(title: str, rows: list) -> list[str]:
+    groups = _group_tickers_by_sub(rows)
+    use_groups = len(groups) > 1 or (len(groups) == 1 and groups[0][0] is not None)
+
+    messages: list[str] = []
+    heading_emitted = False
+
+    for key, group_rows in groups:
+        label = SUBCATEGORY_LABELS.get(key, key) if key else None
+
+        headers = ["Ticker", "Ceiling", "Alert", "Note"]
+        data_rows = []
+        for row in group_rows:
+            ticker = row["ticker"]
+            data_rows.append([
+                _display_name(ticker),
+                _fmt_price(row["user_ceiling"], ticker),
+                _fmt_price(row["alert_price"], ticker),
+                _truncate_note(row["note"]),
+            ])
+
+        table_str = _render_table(headers, data_rows)
+        if not table_str:
+            continue
+
+        parts = []
+        if not heading_emitted:
+            parts.append(f"# {title}")
+            heading_emitted = True
+        if use_groups and label:
+            parts.append(f"- **{label}**")
+        parts.append(f"```\n{table_str}\n```")
+        block = "\n".join(parts)
+
+        if messages and len(messages[-1]) + 1 + len(block) <= _MSG_LIMIT:
+            messages[-1] += "\n" + block
+        else:
+            messages.append(block)
+
+    return messages
 
 
 class TickerCog(commands.Cog):
@@ -127,43 +194,50 @@ class TickerCog(commands.Cog):
             logger.info("User %s removed ticker %s", interaction.user.id, ticker)
         perf_log(logger, "remove", t0)
 
-    @app_commands.command(name="list", description="List all your tickers")
-    async def list_tickers_cmd(self, interaction: discord.Interaction) -> None:
+    @app_commands.command(name="tickers", description="Show all your tickers with ceiling, alerts and notes")
+    async def tickers_cmd(self, interaction: discord.Interaction) -> None:
         t0 = perf_start()
         if not await defer(interaction):
             return
         m = mention(interaction)
         loop = asyncio.get_running_loop()
         user = await loop.run_in_executor(None, get_or_create_user, str(interaction.user.id))
-        tickers = await loop.run_in_executor(None, list_tickers, user["id"])
+        rows = await loop.run_in_executor(None, list_tickers, user["id"])
 
-        if not tickers:
+        if not rows:
             await followup(
                 interaction,
                 f"{m} Your ticker list is empty. Use `/add <TICKER>` to add one.",
             )
             return
 
-        wallet = [row for row in tickers if row["category"] == "wallet"]
-        watchlist = [row for row in tickers if row["category"] == "watchlist"]
+        wallet = [row for row in rows if row["category"] == "wallet"]
+        watchlist = [row for row in rows if row["category"] == "watchlist"]
 
-        lines = [f"{m} Your tickers:\n"]
-        for cat_label, cat_rows in (("Wallet", wallet), ("Watchlist", watchlist)):
-            if not cat_rows:
-                continue
-            groups = _group_tickers(cat_rows)
-            use_groups = len(groups) > 1 or (len(groups) == 1 and groups[0][0] is not None)
-            if use_groups:
-                lines.append(f"**{cat_label}:**")
-                for label, names in groups:
-                    prefix = f"  *{label}:* " if label else "  "
-                    lines.append(f"{prefix}{', '.join(names)}")
+        sections: list[str] = []
+        if wallet:
+            sections.extend(_build_tickers_section("💼 Wallet", wallet))
+        if watchlist:
+            sections.extend(_build_tickers_section("👀 Watchlist", watchlist))
+
+        packed: list[str] = []
+        current = ""
+        for s in sections:
+            if not current:
+                current = s
+            elif len(current) + 1 + len(s) <= _MSG_LIMIT:
+                current += "\n" + s
             else:
-                names = [row["ticker"] for row in cat_rows]
-                lines.append(f"**{cat_label}:** {', '.join(names)}")
+                packed.append(current)
+                current = s
+        if current:
+            packed.append(current)
 
-        await followup(interaction, "\n".join(lines))
-        perf_log(logger, "list", t0)
+        packed[0] = f"{m} Your tickers:\n{packed[0]}"
+        for msg in packed:
+            await followup(interaction, msg)
+
+        perf_log(logger, "tickers", t0)
 
 
 async def setup(bot: commands.Bot) -> None:

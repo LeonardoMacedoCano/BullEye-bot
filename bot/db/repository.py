@@ -81,9 +81,11 @@ def list_tickers(user_id: int) -> list[sqlite3.Row]:
     conn = get_connection()
     try:
         cursor = conn.execute(
-            "SELECT t.symbol AS ticker, ut.category, t.subcategory, ut.user_ceiling "
+            "SELECT t.symbol AS ticker, ut.category, t.subcategory, ut.user_ceiling, ut.note, "
+            "MIN(a.target_price) AS alert_price "
             "FROM user_tickers ut JOIN tickers t ON ut.ticker_id = t.id "
-            "WHERE ut.user_id = ? ORDER BY ut.category, t.symbol",
+            "LEFT JOIN alerts a ON a.user_id = ut.user_id AND a.ticker_id = ut.ticker_id AND a.active = 1 "
+            "WHERE ut.user_id = ? GROUP BY ut.id ORDER BY ut.category, t.symbol",
             (user_id,),
         )
         return cursor.fetchall()
@@ -95,7 +97,7 @@ def get_ticker_row(user_id: int, ticker: str) -> sqlite3.Row | None:
     conn = get_connection()
     try:
         cursor = conn.execute(
-            "SELECT t.symbol AS ticker, ut.category, t.subcategory, ut.user_ceiling "
+            "SELECT t.symbol AS ticker, ut.category, t.subcategory, ut.user_ceiling, ut.note "
             "FROM user_tickers ut JOIN tickers t ON ut.ticker_id = t.id "
             "WHERE ut.user_id = ? AND t.symbol = ?",
             (user_id, ticker.upper()),
@@ -123,6 +125,32 @@ def clear_user_ceiling(user_id: int, ticker: str) -> None:
     try:
         conn.execute(
             "UPDATE user_tickers SET user_ceiling = NULL "
+            "WHERE user_id = ? AND ticker_id = (SELECT id FROM tickers WHERE symbol = ?)",
+            (user_id, ticker.upper()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def set_user_note(user_id: int, ticker: str, note: str) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE user_tickers SET note = ? "
+            "WHERE user_id = ? AND ticker_id = (SELECT id FROM tickers WHERE symbol = ?)",
+            (note, user_id, ticker.upper()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def clear_user_note(user_id: int, ticker: str) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE user_tickers SET note = NULL "
             "WHERE user_id = ? AND ticker_id = (SELECT id FROM tickers WHERE symbol = ?)",
             (user_id, ticker.upper()),
         )

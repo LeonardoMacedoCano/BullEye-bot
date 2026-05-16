@@ -79,3 +79,14 @@ def init_db() -> None:
         logger.info("Database initialized at %s", DATABASE_PATH)
     finally:
         conn.close()
+
+    # Safe migration: add note column if it doesn't exist yet
+    conn = get_connection()
+    try:
+        conn.execute("ALTER TABLE user_tickers ADD COLUMN note TEXT DEFAULT NULL")
+        conn.commit()
+        logger.info("Migration applied: user_tickers.note column added")
+    except Exception:
+        pass  # column already exists
+    finally:
+        conn.close()

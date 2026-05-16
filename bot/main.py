@@ -33,6 +33,7 @@ COGS = [
     "bot.commands.dividends_cmd",
     "bot.commands.cache_cmd",
     "bot.commands.help_cmd",
+    "bot.commands.note_cmd",
     "bot.commands.resetdb_cmd",
 ]
 
