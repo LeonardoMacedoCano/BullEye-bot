@@ -298,9 +298,22 @@ def _build_performance(wallet: list, watchlist: list) -> list[str]:
         for period_label, key in [("Day:", "day"), ("Week:", "week"), ("Month:", "month")]:
             best  = max(items, key=lambda x: x[key])
             worst = min(items, key=lambda x: x[key])
-            bd = f"▲ {best['name']} {_fmt_pct(best[key])}"
-            wd = f"▼ {worst['name']} {_fmt_pct(worst[key])}"
-            lines.append(f"  {period_label:<7}{bd:<{COL}}{wd}")
+            if worst["name"] == best["name"]:
+                arrow = "▲" if best[key] >= 0 else "▼"
+                lines.append(f"  {period_label:<7}{arrow} {best['name']} {_fmt_pct(best[key])}")
+            else:
+                show_best  = best[key] > 0
+                show_worst = worst[key] < 0
+                if not show_best and not show_worst:
+                    continue
+                bd = f"▲ {best['name']} {_fmt_pct(best[key])}"
+                wd = f"▼ {worst['name']} {_fmt_pct(worst[key])}"
+                if show_best and show_worst:
+                    lines.append(f"  {period_label:<7}{bd:<{COL}}{wd}")
+                elif show_best:
+                    lines.append(f"  {period_label:<7}{bd}")
+                else:
+                    lines.append(f"  {period_label:<7}{wd}")
 
     table = "\n".join(lines)
     msg = f"# 📈 Performance\n```\n{table}\n```"
