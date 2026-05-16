@@ -5,7 +5,6 @@ import sys
 
 import discord
 import discord.app_commands as app_commands
-from discord.errors import PrivilegedIntentsRequired
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -25,8 +24,6 @@ if not DISCORD_TOKEN:
     logger.error("DISCORD_TOKEN environment variable is not set. Exiting.")
     sys.exit(1)
 
-PREFIX = os.getenv("PREFIX") or "!"
-
 COGS = [
     "bot.commands.ticker",
     "bot.commands.alerts",
@@ -40,26 +37,9 @@ COGS = [
 ]
 
 intents = discord.Intents.default()
-intents.message_content = True
 
-bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
+bot = commands.Bot(command_prefix=[], intents=intents, help_command=None)
 bot.heavy_semaphore = asyncio.Semaphore(3)
-
-
-@bot.before_invoke
-async def _auto_defer(ctx: commands.Context) -> None:
-    """Defer every slash command as early as possible — before any command code runs."""
-    if ctx.interaction is None or ctx.interaction.response.is_done():
-        return
-    try:
-        await ctx.defer()
-    except (discord.NotFound, discord.HTTPException) as exc:
-        logger.warning(
-            "_auto_defer: failed to defer command '%s' for user %s (%s)",
-            ctx.command,
-            ctx.author.id if hasattr(ctx, "author") else "?",
-            getattr(exc, "code", type(exc).__name__),
-        )
 
 
 @bot.tree.error
@@ -71,26 +51,30 @@ async def on_app_command_error(
     while hasattr(cause, "original"):
         cause = cause.original
 
-    if isinstance(cause, discord.NotFound) and cause.code == 10062:
+    if isinstance(cause, discord.NotFound) and getattr(cause, "code", None) == 10062:
         logger.warning(
-            "App command '%s' received stale interaction (10062)",
+            "Stale interaction (10062) for command '%s' by user %s",
             interaction.command.name if interaction.command else "?",
+            interaction.user.id,
         )
         return
 
     logger.error(
-        "App command '%s' failed: %s",
+        "App command '%s' failed for user %s: %s",
         interaction.command.name if interaction.command else "?",
+        interaction.user.id,
         cause,
         exc_info=cause,
     )
-    if not interaction.response.is_done():
-        try:
-            await interaction.response.send_message(
-                "❌ Unexpected error. Please try again.", ephemeral=True
-            )
-        except Exception:
-            pass
+
+    msg = "❌ Unexpected error. Please try again."
+    try:
+        if not interaction.response.is_done():
+            await interaction.response.send_message(msg, ephemeral=True)
+        else:
+            await interaction.followup.send(msg, ephemeral=True)
+    except Exception:
+        pass
 
 
 @bot.event
@@ -98,46 +82,11 @@ async def on_ready() -> None:
     logger.info("BullEyeBot is online as %s (id: %s)", bot.user, bot.user.id)
     if not getattr(bot, "_commands_synced", False):
         bot._commands_synced = True
-        await bot.tree.sync()
-        logger.info("Slash commands synced.")
-
-
-def _root_cause(error: Exception) -> Exception:
-    while hasattr(error, "original"):
-        error = error.original
-    return error
-
-
-@bot.event
-async def on_command_error(ctx: commands.Context, error: commands.CommandError) -> None:
-    if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"{ctx.author.mention} Missing argument: `{error.param.name}`.")
-        return
-    if isinstance(error, commands.CommandNotFound):
-        return
-
-    cause = _root_cause(error)
-
-    if isinstance(cause, discord.NotFound) and cause.code == 10062:
-        logger.warning(
-            "Command '%s' received stale/expired interaction (10062) — "
-            "token already invalid when bot processed it",
-            ctx.command,
-        )
         try:
-            await ctx.channel.send(
-                f"{ctx.author.mention} ⚠️ Your interaction expired. Please try the command again.",
-                delete_after=8,
-            )
-        except Exception:
-            pass
-        return
-
-    logger.error("Command '%s' failed: %s", ctx.command, cause, exc_info=cause)
-    try:
-        await ctx.send(f"{ctx.author.mention} ❌ Unexpected error. Please try again.")
-    except Exception:
-        pass
+            await bot.tree.sync()
+            logger.info("Slash commands synced.")
+        except discord.HTTPException as exc:
+            logger.error("Failed to sync slash commands: %s", exc)
 
 
 async def main() -> None:
@@ -149,15 +98,7 @@ async def main() -> None:
             logger.info("Loaded cog: %s", cog)
 
         bot.loop.create_task(scheduler_loop(bot))
-        try:
-            await bot.start(DISCORD_TOKEN)
-        except PrivilegedIntentsRequired:
-            logger.error(
-                "Message Content Intent is not enabled in the Discord Developer Portal. "
-                "Go to discord.com/developers/applications, select your bot, open the 'Bot' tab, "
-                "and enable 'Message Content Intent' under Privileged Gateway Intents."
-            )
-            sys.exit(1)
+        await bot.start(DISCORD_TOKEN)
 
 
 if __name__ == "__main__":

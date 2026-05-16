@@ -1,11 +1,13 @@
 import asyncio
 import logging
-from typing import Literal
+
+import discord
+from discord import app_commands
 from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, add_ticker, remove_ticker, list_tickers, get_ticker_category
 from bot.services.market import validate_ticker, normalize_ticker, get_ticker_subcategory, SUBCATEGORY_LABELS, SUBCATEGORY_ORDER
-from bot.utils import safe_defer
+from bot.utils import defer, followup, mention, perf_start, perf_log
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +41,26 @@ class TickerCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @commands.hybrid_command(name="add")
-    async def add(self, ctx: commands.Context, ticker: str, category: Literal["wallet", "watchlist"] = "watchlist") -> None:
-        send = await safe_defer(ctx)
-        if category not in VALID_CATEGORIES:
-            await send(
-                f"{ctx.author.mention} Invalid category `{category}`. Use `wallet` or `watchlist`."
-            )
+    @app_commands.command(name="add", description="Add a ticker to your wallet or watchlist")
+    @app_commands.describe(
+        ticker="Ticker symbol (e.g. AAPL, BTC, PETR4)",
+        category="Which list to add to (default: watchlist)",
+    )
+    @app_commands.choices(category=[
+        app_commands.Choice(name="wallet", value="wallet"),
+        app_commands.Choice(name="watchlist", value="watchlist"),
+    ])
+    async def add(
+        self,
+        interaction: discord.Interaction,
+        ticker: str,
+        category: app_commands.Choice[str] = None,
+    ) -> None:
+        t0 = perf_start()
+        if not await defer(interaction):
             return
+        m = mention(interaction)
+        cat_value = category.value if category is not None else "watchlist"
 
         original = ticker.upper().strip()
         ticker = normalize_ticker(original)
@@ -61,67 +75,79 @@ class TickerCog(commands.Cog):
             valid, subcategory = await loop.run_in_executor(None, _validate)
         except Exception:
             logger.exception("Error validating ticker %s", ticker)
-            await send(f"{ctx.author.mention} ❌ Error validating ticker. Please try again.")
+            await followup(interaction, f"{m} ❌ Error validating ticker. Please try again.")
             return
 
         if not valid:
-            await send(f"{ctx.author.mention} Ticker `{ticker}` not found.")
+            await followup(interaction, f"{m} Ticker `{ticker}` not found.")
             return
 
-        user = await loop.run_in_executor(None, get_or_create_user, str(ctx.author.id))
+        user = await loop.run_in_executor(None, get_or_create_user, str(interaction.user.id))
         existing = await loop.run_in_executor(None, get_ticker_category, user["id"], ticker)
-        if existing == category:
-            await send(f"{ctx.author.mention} `{ticker}` is already in your **{category}**.")
+        if existing == cat_value:
+            await followup(interaction, f"{m} `{ticker}` is already in your **{cat_value}**.")
             return
         if existing:
-            await send(
-                f"{ctx.author.mention} `{ticker}` is already in your **{existing}**. "
-                f"Remove it first with `!remove {ticker}`."
+            await followup(
+                interaction,
+                f"{m} `{ticker}` is already in your **{existing}**. "
+                f"Remove it first with `/remove {ticker}`.",
             )
             return
 
-        await loop.run_in_executor(None, add_ticker, user["id"], ticker, category, subcategory)
+        await loop.run_in_executor(None, add_ticker, user["id"], ticker, cat_value, subcategory)
 
         sub_label = f" ({SUBCATEGORY_LABELS[subcategory]})" if subcategory in SUBCATEGORY_LABELS else ""
         if ticker != original:
-            await send(
-                f"{ctx.author.mention} `{original}` interpreted as `{ticker}`. Added to **{category}**{sub_label}."
+            await followup(
+                interaction,
+                f"{m} `{original}` interpreted as `{ticker}`. Added to **{cat_value}**{sub_label}.",
             )
         else:
-            await send(f"{ctx.author.mention} Ticker `{ticker}` added to **{category}**{sub_label}.")
-        logger.info("User %s added ticker %s to %s (%s)", ctx.author.id, ticker, category, subcategory)
+            await followup(interaction, f"{m} Ticker `{ticker}` added to **{cat_value}**{sub_label}.")
+        logger.info("User %s added ticker %s to %s (%s)", interaction.user.id, ticker, cat_value, subcategory)
+        perf_log(logger, "add", t0)
 
-    @commands.hybrid_command(name="remove")
-    async def remove(self, ctx: commands.Context, ticker: str) -> None:
-        send = await safe_defer(ctx)
+    @app_commands.command(name="remove", description="Remove a ticker from your list")
+    @app_commands.describe(ticker="Ticker symbol to remove")
+    async def remove(self, interaction: discord.Interaction, ticker: str) -> None:
+        t0 = perf_start()
+        if not await defer(interaction):
+            return
+        m = mention(interaction)
         original = ticker.upper().strip()
         ticker = normalize_ticker(original)
         loop = asyncio.get_running_loop()
-        user = await loop.run_in_executor(None, get_or_create_user, str(ctx.author.id))
+        user = await loop.run_in_executor(None, get_or_create_user, str(interaction.user.id))
         count = await loop.run_in_executor(None, remove_ticker, user["id"], ticker)
         if count == 0:
-            await send(f"{ctx.author.mention} Ticker `{ticker}` not found in your list.")
+            await followup(interaction, f"{m} Ticker `{ticker}` not found in your list.")
         else:
-            await send(f"{ctx.author.mention} Ticker `{ticker}` removed.")
-            logger.info("User %s removed ticker %s", ctx.author.id, ticker)
+            await followup(interaction, f"{m} Ticker `{ticker}` removed.")
+            logger.info("User %s removed ticker %s", interaction.user.id, ticker)
+        perf_log(logger, "remove", t0)
 
-    @commands.hybrid_command(name="list")
-    async def list_tickers_cmd(self, ctx: commands.Context) -> None:
-        send = await safe_defer(ctx)
+    @app_commands.command(name="list", description="List all your tickers")
+    async def list_tickers_cmd(self, interaction: discord.Interaction) -> None:
+        t0 = perf_start()
+        if not await defer(interaction):
+            return
+        m = mention(interaction)
         loop = asyncio.get_running_loop()
-        user = await loop.run_in_executor(None, get_or_create_user, str(ctx.author.id))
+        user = await loop.run_in_executor(None, get_or_create_user, str(interaction.user.id))
         tickers = await loop.run_in_executor(None, list_tickers, user["id"])
 
         if not tickers:
-            await send(
-                f"{ctx.author.mention} Your ticker list is empty. Use `!add <TICKER>` to add one."
+            await followup(
+                interaction,
+                f"{m} Your ticker list is empty. Use `/add <TICKER>` to add one.",
             )
             return
 
         wallet = [row for row in tickers if row["category"] == "wallet"]
         watchlist = [row for row in tickers if row["category"] == "watchlist"]
 
-        lines = [f"{ctx.author.mention} Your tickers:\n"]
+        lines = [f"{m} Your tickers:\n"]
         for cat_label, cat_rows in (("Wallet", wallet), ("Watchlist", watchlist)):
             if not cat_rows:
                 continue
@@ -136,7 +162,8 @@ class TickerCog(commands.Cog):
                 names = [row["ticker"] for row in cat_rows]
                 lines.append(f"**{cat_label}:** {', '.join(names)}")
 
-        await send("\n".join(lines))
+        await followup(interaction, "\n".join(lines))
+        perf_log(logger, "list", t0)
 
 
 async def setup(bot: commands.Bot) -> None:
