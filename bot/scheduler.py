@@ -1,11 +1,10 @@
 import asyncio
 import logging
-import os
 from datetime import datetime
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import discord
 
+from bot.config import TIMEZONE as _TZ, TIMEZONE_NAME as _tz_name
 from bot.db.repository import (
     get_active_alerts, deactivate_alert,
     get_all_active_schedules, update_last_sent_date,
@@ -14,13 +13,6 @@ from bot.services.market import get_ticker_data
 from bot.commands.summary import build_summary
 
 logger = logging.getLogger(__name__)
-
-_tz_name = os.getenv("TIMEZONE") or "UTC"
-try:
-    _TZ = ZoneInfo(_tz_name)
-except ZoneInfoNotFoundError:
-    logger.warning("Unknown TIMEZONE %r, falling back to UTC", _tz_name)
-    _TZ = ZoneInfo("UTC")
 
 
 async def scheduler_loop(bot: discord.Client) -> None:

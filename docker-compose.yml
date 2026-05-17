@@ -9,6 +9,9 @@ services:
       - PREFIX=${PREFIX:-!}
       - TIMEZONE=${TIMEZONE:-UTC}
       - ENABLE_RESETDB=${ENABLE_RESETDB:-}
+      - PRICE_CACHE_TTL_MINUTES=${PRICE_CACHE_TTL_MINUTES:-5}
+      - DIV_CACHE_TTL_HOURS=${DIV_CACHE_TTL_HOURS:-24}
+      - FEAR_GREED_CACHE_TTL_MINUTES=${FEAR_GREED_CACHE_TTL_MINUTES:-30}
     volumes:
       - bot_data:/data
     restart: unless-stopped

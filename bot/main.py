@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 import os
 import sys
@@ -6,17 +7,25 @@ import sys
 import discord
 import discord.app_commands as app_commands
 from discord.ext import commands
-from dotenv import load_dotenv
 
+from bot.config import TIMEZONE, TIMEZONE_NAME
 from bot.db.database import init_db
 from bot.scheduler import scheduler_loop
 
-load_dotenv()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+class _TZFormatter(logging.Formatter):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+        dt = datetime.datetime.fromtimestamp(record.created, tz=TIMEZONE)
+        if datefmt:
+            return dt.strftime(datefmt)
+        s = dt.strftime(self.default_time_format)
+        return self.default_msec_format % (s, record.msecs)
+
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(_TZFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+logging.root.setLevel(logging.INFO)
+logging.root.addHandler(_handler)
 logger = logging.getLogger(__name__)
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")

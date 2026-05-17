@@ -18,8 +18,7 @@ SUBCATEGORY_LABELS = {
     "stocks": "Stocks",
 }
 
-_PRICE_CACHE_TTL = 300
-_DIV_CACHE_TTL   = 86400
+from bot.config import PRICE_CACHE_TTL as _PRICE_CACHE_TTL, DIV_CACHE_TTL as _DIV_CACHE_TTL
 
 _price_cache: dict[str, tuple[dict, float]] = {}
 _price_cache_lock = threading.Lock()
