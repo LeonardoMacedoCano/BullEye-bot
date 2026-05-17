@@ -6,7 +6,6 @@ services:
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - DATABASE_PATH=${DATABASE_PATH:-/data/bot.db}
-      - PREFIX=${PREFIX:-!}
       - TIMEZONE=${TIMEZONE:-UTC}
       - ENABLE_RESETDB=${ENABLE_RESETDB:-}
       - PRICE_CACHE_TTL_MINUTES=${PRICE_CACHE_TTL_MINUTES:-5}
