@@ -8,7 +8,17 @@ from collections import OrderedDict
 import requests
 import yfinance as yf
 
+from bot.shared.context import get_request_id
+
 logger = logging.getLogger(__name__)
+
+_cache_stats = {"hits": 0, "misses": 0, "errors": 0}
+_cache_stats_lock = threading.Lock()
+
+
+def get_cache_stats() -> dict:
+    with _cache_stats_lock:
+        return dict(_cache_stats)
 
 _B3_PATTERN = re.compile(r'^[A-Z]{4,5}(3|4|11)$')
 _ALIASES = {"BTC": "BTC-USD"}
@@ -61,16 +71,24 @@ def normalize_ticker(ticker: str) -> str:
 
 
 def get_ticker_data(ticker: str) -> dict | None:
+    rid = get_request_id()
     now = time.time()
     with _price_cache_lock:
         cached = _price_cache.get(ticker)
         if cached is not None and now - cached[1] < _PRICE_CACHE_TTL:
+            with _cache_stats_lock:
+                _cache_stats["hits"] += 1
+            logger.debug("[%s] Cache hit for %s", rid, ticker)
             return cached[0]
+    with _cache_stats_lock:
+        _cache_stats["misses"] += 1
     try:
         t = yf.Ticker(ticker)
         history = t.history(period="1mo")
         if history.empty:
-            logger.warning("No data returned for ticker %s (empty history)", ticker)
+            logger.warning("[%s] No data returned for ticker %s (empty history)", rid, ticker)
+            with _cache_stats_lock:
+                _cache_stats["errors"] += 1
             return None
         close = history["Close"]
         current_price = float(close.iloc[-1])
@@ -98,7 +116,9 @@ def get_ticker_data(ticker: str) -> dict | None:
                 _price_cache.popitem(last=False)
         return data
     except Exception as exc:
-        logger.warning("Failed to fetch data for ticker %s: %s", ticker, exc)
+        logger.warning("[%s] Failed to fetch data for ticker %s: %s", rid, ticker, exc)
+        with _cache_stats_lock:
+            _cache_stats["errors"] += 1
         return None
 
 

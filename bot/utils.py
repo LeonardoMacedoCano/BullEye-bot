@@ -4,11 +4,14 @@ from typing import Any
 
 import discord
 
+from bot.shared.context import new_request_id
+
 logger = logging.getLogger(__name__)
 
 
 async def defer(interaction: discord.Interaction, ephemeral: bool = False) -> bool:
     """Defer the interaction. Returns False on stale interaction (10062) — caller should return immediately."""
+    new_request_id()
     try:
         await interaction.response.defer(thinking=True, ephemeral=ephemeral)
         return True

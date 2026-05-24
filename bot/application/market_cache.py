@@ -9,6 +9,7 @@ from bot.db.repository import (
     upsert_provento, get_proventos_for_ticker,
 )
 from bot.services.market import dividends_trailing_12m, fetch_br_proventos, ts_to_date
+from bot.shared.context import get_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +20,13 @@ def get_br_stock_metrics(ticker: str, current_price: float) -> dict:
     stale = row is None or (time.time() - row["updated_at"]) > _DIV_CACHE_TTL
 
     if stale:
+        rid = get_request_id()
         try:
             info = yf.Ticker(ticker).info
             dy_rate = float(info.get("trailingAnnualDividendRate") or 0.0)
             dy_yield = float(info.get("trailingAnnualDividendYield") or 0.0)
         except Exception as exc:
-            logger.warning("Failed to fetch .info for %s: %s", ticker, exc)
+            logger.warning("[%s] Failed to fetch .info for %s: %s", rid, ticker, exc)
             return {"dy_yield": 0.0}
 
         if dy_rate == 0.0:
@@ -79,7 +81,7 @@ def get_dividend_info(ticker: str) -> dict | None:
                     "Dividendo", None,
                 )
         except Exception as exc:
-            logger.warning("Failed to fetch dividend info for %s: %s", ticker, exc)
+            logger.warning("[%s] Failed to fetch dividend info for %s: %s", get_request_id(), ticker, exc)
             return None
 
     return {}
