@@ -1,14 +1,15 @@
 import datetime
 import logging
+import math
 import re
 import threading
 import time
 from collections import OrderedDict
 
-import requests
 import yfinance as yf
 
 from bot.shared.context import get_request_id
+from bot.shared.retry import fetch_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,11 @@ def get_ticker_data(ticker: str) -> dict | None:
 
 
 def validate_ticker(ticker: str) -> bool:
-    return get_ticker_data(ticker) is not None
+    try:
+        price = yf.Ticker(ticker).fast_info.last_price
+        return price is not None and not math.isnan(float(price)) and float(price) > 0
+    except Exception:
+        return False
 
 
 def dividends_trailing_12m(ticker: str) -> float:
@@ -143,12 +148,11 @@ def fetch_br_proventos(ticker: str) -> list[dict]:
     """Fetches proventos from brapi.dev. Returns list of dicts; caller handles DB writes."""
     symbol = ticker.upper().replace(".SA", "")
     try:
-        resp = requests.get(
+        resp = fetch_with_retry(
             f"https://brapi.dev/api/quote/{symbol}",
             params={"modules": "dividendsData"},
             timeout=10,
         )
-        resp.raise_for_status()
         results = resp.json().get("results", [])
         if not results:
             return []

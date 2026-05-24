@@ -1,11 +1,11 @@
 import logging
 import threading
 import time
-import requests
 
 logger = logging.getLogger(__name__)
 
 from bot.config import FEAR_GREED_CACHE_TTL as _CACHE_TTL
+from bot.shared.retry import fetch_with_retry
 
 _FEAR_GREED_URL = "https://api.alternative.me/fng/?limit=1"
 
@@ -27,8 +27,7 @@ def get_fear_greed_index() -> dict | None:
         if _cached is not None and (time.time() - _cached_at) < _CACHE_TTL:
             return _cached
         try:
-            response = requests.get(_FEAR_GREED_URL, timeout=10)
-            response.raise_for_status()
+            response = fetch_with_retry(_FEAR_GREED_URL, timeout=10)
             data = response.json()
             entry = data["data"][0]
             result = {

@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from bot.db.repository import get_or_create_user, list_tickers, update_ticker_subcategory
 from bot.services.market import get_ticker_data, get_ticker_subcategory, SUBCATEGORY_ORDER, SUBCATEGORY_LABELS
@@ -275,12 +276,28 @@ def _build_opportunities(tickers: list) -> list[str]:
     return [msg] if len(msg) <= MSG_LIMIT else [msg[:MSG_LIMIT]]
 
 
+def _prefetch_tickers(tickers: list) -> None:
+    """Warm the price cache for all tickers concurrently before building sections."""
+    unique = list({row["ticker"] for row in tickers})
+    if not unique:
+        return
+    workers = min(len(unique), 10)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(get_ticker_data, t) for t in unique]
+        for f in as_completed(futures):
+            try:
+                f.result()
+            except Exception:
+                pass
+
+
 def build_summary(user_id: int, discord_mention: str) -> list[str]:
     tickers = list_tickers(user_id)
     if not tickers:
         return [f"{discord_mention} You have no tickers configured. Use `/add <TICKER>` to get started."]
 
     tickers = _backfill_subcategories(user_id, tickers)
+    _prefetch_tickers(tickers)
     wallet    = [row for row in tickers if row["category"] == "wallet"]
     watchlist = [row for row in tickers if row["category"] == "watchlist"]
     has_btc   = any(row["ticker"].upper() == "BTC-USD" for row in tickers)
