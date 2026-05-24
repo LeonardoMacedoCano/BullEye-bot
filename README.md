@@ -82,9 +82,9 @@ IBOV   Bovespa Index     BR/Stocks   131450  -0.8%  —
 F&G    Fear & Greed      Crypto/BTC  65      —      Greed
 
 # 📈 Performance
-         Day%            Week%          Month%
-  Best:  PETR4 +1.2%     BTC +5.3%      VALE3 +8.4%
-  Worst: VALE3 -0.5%     AAPL -1.1%     PETR4 -2.1%
+  Day:    ▲ PETR4 +1.2%    ▼ VALE3 -0.5%
+  Week:   ▲ BTC   +5.3%    ▼ AAPL  -1.1%
+  Month:  ▲ VALE3 +8.4%    ▼ PETR4 -2.1%
 
 # 📅 Dividends
 Ticker  Ex-Date     Pay-Date    Type       Amount
@@ -132,6 +132,14 @@ python -m bot.main
 ```
 
 > Slash commands may take up to 1 hour to appear globally after the first start.
+
+### 4. Run the tests
+
+```bash
+pytest
+```
+
+109 tests covering formatting utilities, market normalization, all database operations, and the summary use case. A dedicated import smoke test verifies every module loads without error, catching broken imports before they reach the container.
 
 ---
 
