@@ -51,12 +51,21 @@ async def _process_alert(bot: discord.Client, loop: asyncio.AbstractEventLoop, a
             logger.error("Failed to send alert DM to user %s: %s", alert["discord_id"], exc)
 
 
+_ALERT_CONCURRENCY = 10
+
+
 async def _check_alerts(bot: discord.Client) -> None:
     loop = asyncio.get_running_loop()
     alerts = await loop.run_in_executor(None, get_active_alerts)
     if not alerts:
         return
-    tasks = [_process_alert(bot, loop, alert) for alert in alerts]
+    sem = asyncio.Semaphore(_ALERT_CONCURRENCY)
+
+    async def _bounded(alert: dict) -> None:
+        async with sem:
+            await _process_alert(bot, loop, alert)
+
+    tasks = [_bounded(alert) for alert in alerts]
     await asyncio.gather(*tasks, return_exceptions=True)
 
 

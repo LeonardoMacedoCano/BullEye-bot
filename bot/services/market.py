@@ -2,6 +2,7 @@ import logging
 import re
 import threading
 import time
+from collections import OrderedDict
 import requests
 import yfinance as yf
 
@@ -20,7 +21,8 @@ SUBCATEGORY_LABELS = {
 
 from bot.config import PRICE_CACHE_TTL as _PRICE_CACHE_TTL, DIV_CACHE_TTL as _DIV_CACHE_TTL
 
-_price_cache: dict[str, tuple[dict, float]] = {}
+_PRICE_CACHE_MAX = 500
+_price_cache: OrderedDict[str, tuple[dict, float]] = OrderedDict()
 _price_cache_lock = threading.Lock()
 
 _BR_TYPE_MAP = {
@@ -115,7 +117,11 @@ def get_ticker_data(ticker: str) -> dict | None:
             "month_change_pct": month_change_pct,
         }
         with _price_cache_lock:
+            if ticker in _price_cache:
+                _price_cache.move_to_end(ticker)
             _price_cache[ticker] = (data, now)
+            if len(_price_cache) > _PRICE_CACHE_MAX:
+                _price_cache.popitem(last=False)
         return data
     except Exception as exc:
         logger.warning("Failed to fetch data for ticker %s: %s", ticker, exc)

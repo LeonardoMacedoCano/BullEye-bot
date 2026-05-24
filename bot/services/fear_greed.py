@@ -26,20 +26,18 @@ def get_fear_greed_index() -> dict | None:
     with _cache_lock:
         if _cached is not None and (time.time() - _cached_at) < _CACHE_TTL:
             return _cached
-    try:
-        response = requests.get(_FEAR_GREED_URL, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        entry = data["data"][0]
-        result = {
-            "value": int(entry["value"]),
-            "classification": entry["value_classification"],
-        }
-        with _cache_lock:
+        try:
+            response = requests.get(_FEAR_GREED_URL, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            entry = data["data"][0]
+            result = {
+                "value": int(entry["value"]),
+                "classification": entry["value_classification"],
+            }
             _cached = result
             _cached_at = time.time()
-        return result
-    except Exception as exc:
-        logger.warning("Failed to fetch Fear & Greed index: %s", exc)
-        with _cache_lock:
+            return result
+        except Exception as exc:
+            logger.warning("Failed to fetch Fear & Greed index: %s", exc)
             return _cached

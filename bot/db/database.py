@@ -8,8 +8,9 @@ DATABASE_PATH = os.getenv("DATABASE_PATH") or "/data/bot.db"
 
 
 def get_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(DATABASE_PATH, timeout=5)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
@@ -19,6 +20,8 @@ def init_db() -> None:
         os.makedirs(db_dir, exist_ok=True)
     conn = get_connection()
     try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.commit()
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS users (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
