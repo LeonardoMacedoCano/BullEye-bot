@@ -8,12 +8,9 @@ from discord.ext import commands
 from bot.db.repository import get_or_create_user, get_ticker_category, get_ticker_row, set_user_ceiling, clear_user_ceiling
 from bot.services.market import normalize_ticker, get_ticker_data
 from bot.utils import defer, followup, mention, perf_start, perf_log
+from bot.shared.formatting import currency
 
 logger = logging.getLogger(__name__)
-
-
-def _sym(ticker: str) -> str:
-    return "R$" if ticker.upper().endswith(".SA") else "$"
 
 
 class CeilingCog(commands.Cog):
@@ -47,7 +44,7 @@ class CeilingCog(commands.Cog):
             )
             return
 
-        sym = _sym(ticker)
+        sym = currency(ticker)
 
         if value is None:
             row = await loop.run_in_executor(None, get_ticker_row, user["id"], ticker)

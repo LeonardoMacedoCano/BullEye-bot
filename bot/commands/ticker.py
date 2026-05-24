@@ -8,28 +8,17 @@ from discord.ext import commands
 from bot.db.repository import get_or_create_user, add_ticker, remove_ticker, list_tickers, get_ticker_category
 from bot.services.market import validate_ticker, normalize_ticker, get_ticker_subcategory, SUBCATEGORY_LABELS, SUBCATEGORY_ORDER
 from bot.utils import defer, followup, mention, perf_start, perf_log
-from bot.commands.summary import _render_table
+from bot.shared.formatting import MSG_LIMIT, display_name, currency, render_table, group_by_subcategory
 
 logger = logging.getLogger(__name__)
 
 VALID_CATEGORIES = ("wallet", "watchlist")
-_MSG_LIMIT = 1900
-
-
-def _display_name(ticker: str) -> str:
-    if ticker.upper() == "BTC-USD":
-        return "BTC"
-    return ticker[:-3] if ticker.upper().endswith(".SA") else ticker
-
-
-def _sym(ticker: str) -> str:
-    return "R$" if ticker.upper().endswith(".SA") else "$"
 
 
 def _fmt_price(price: float | None, ticker: str) -> str:
     if price is None:
         return "—"
-    sym = _sym(ticker)
+    sym = currency(ticker)
     return f"{sym}{price:,.2f}"
 
 
@@ -39,31 +28,8 @@ def _truncate_note(note: str | None, max_len: int = 80) -> str:
     return note if len(note) <= max_len else note[:max_len - 1] + "…"
 
 
-def _group_tickers_by_sub(rows: list) -> list[tuple[str | None, list]]:
-    groups: dict[str | None, list] = {}
-    for row in rows:
-        try:
-            key = row["subcategory"]
-        except (IndexError, KeyError):
-            key = None
-        if key not in groups:
-            groups[key] = []
-        groups[key].append(row)
-
-    ordered = []
-    for key in SUBCATEGORY_ORDER:
-        if key in groups:
-            ordered.append((key, groups[key]))
-    for key, vals in groups.items():
-        if key is not None and key not in SUBCATEGORY_ORDER:
-            ordered.append((key, vals))
-    if None in groups:
-        ordered.append((None, groups[None]))
-    return ordered
-
-
 def _build_tickers_section(title: str, rows: list) -> list[str]:
-    groups = _group_tickers_by_sub(rows)
+    groups = group_by_subcategory(rows, SUBCATEGORY_ORDER)
     use_groups = len(groups) > 1 or (len(groups) == 1 and groups[0][0] is not None)
 
     messages: list[str] = []
@@ -77,13 +43,13 @@ def _build_tickers_section(title: str, rows: list) -> list[str]:
         for row in group_rows:
             ticker = row["ticker"]
             data_rows.append([
-                _display_name(ticker),
+                display_name(ticker),
                 _fmt_price(row["user_ceiling"], ticker),
                 _fmt_price(row["alert_price"], ticker),
                 _truncate_note(row["note"]),
             ])
 
-        table_str = _render_table(headers, data_rows)
+        table_str = render_table(headers, data_rows)
         if not table_str:
             continue
 
@@ -96,7 +62,7 @@ def _build_tickers_section(title: str, rows: list) -> list[str]:
         parts.append(f"```\n{table_str}\n```")
         block = "\n".join(parts)
 
-        if messages and len(messages[-1]) + 1 + len(block) <= _MSG_LIMIT:
+        if messages and len(messages[-1]) + 1 + len(block) <= MSG_LIMIT:
             messages[-1] += "\n" + block
         else:
             messages.append(block)
@@ -225,7 +191,7 @@ class TickerCog(commands.Cog):
         for s in sections:
             if not current:
                 current = s
-            elif len(current) + 1 + len(s) <= _MSG_LIMIT:
+            elif len(current) + 1 + len(s) <= MSG_LIMIT:
                 current += "\n" + s
             else:
                 packed.append(current)

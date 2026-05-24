@@ -6,39 +6,20 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.utils import defer, followup, mention, perf_start, perf_log
-
-from bot.db.repository import (
-    get_or_create_user, list_tickers, update_ticker_subcategory, get_proventos_upcoming,
-)
+from bot.db.repository import get_or_create_user, list_tickers, update_ticker_subcategory
 from bot.services.market import (
-    get_ticker_data, get_ticker_subcategory, get_br_stock_metrics, get_dividend_info,
+    get_ticker_data, get_ticker_subcategory, get_br_stock_metrics,
     SUBCATEGORY_ORDER, SUBCATEGORY_LABELS,
 )
+from bot.services.dividends import build_proventos_radar
 from bot.services.fear_greed import get_fear_greed_index
 from bot.services.sentiment import get_vix, get_ibov
+from bot.shared.formatting import (
+    MSG_LIMIT, display_name, currency, fmt, fmt_pct,
+    render_table, pack_messages, group_by_subcategory,
+)
 
 logger = logging.getLogger(__name__)
-
-_MSG_LIMIT = 1900
-
-
-def _display_name(ticker: str) -> str:
-    if ticker.upper() == "BTC-USD":
-        return "BTC"
-    return ticker[:-3] if ticker.upper().endswith(".SA") else ticker
-
-
-def _currency(ticker: str) -> str:
-    return "R$" if ticker.upper().endswith(".SA") else "$"
-
-
-def _fmt(value: float, symbol: str) -> str:
-    return f"{symbol}{value:,.2f}"
-
-
-def _fmt_pct(pct: float) -> str:
-    sign = "+" if pct >= 0 else ""
-    return f"{sign}{pct:.1f}%"
 
 
 def _fmt_ceiling(ceiling: float | None, current_price: float, sym: str) -> str:
@@ -49,31 +30,6 @@ def _fmt_ceiling(ceiling: float | None, current_price: float, sym: str) -> str:
     return f"{sym}{ceiling:,.2f} {sign}{m:.0f}%"
 
 
-def _render_table(
-    headers: list[str],
-    rows: list[list[str]],
-    required_headers: list[str] | None = None,
-) -> str:
-    required = set(required_headers or [])
-    active = [
-        i for i in range(len(headers))
-        if headers[i] in required or any(r[i] != "—" for r in rows)
-    ]
-    if not active:
-        return ""
-    widths = [
-        max(len(headers[i]), max((len(r[i]) for r in rows), default=0)) + 1
-        for i in active
-    ]
-    header_line = "".join(f"{headers[i]:<{w}}" for i, w in zip(active, widths))
-    sep = "─" * sum(widths)
-    data_lines = [
-        "".join(f"{r[i]:<{w}}" for i, w in zip(active, widths))
-        for r in rows
-    ]
-    return "\n".join([header_line, sep] + data_lines)
-
-
 def _collect_rows(group_rows: list, show_br: bool) -> tuple[list[str], list[list[str]]]:
     data_rows: list[list[str]] = []
 
@@ -81,8 +37,8 @@ def _collect_rows(group_rows: list, show_br: bool) -> tuple[list[str], list[list
         headers = ["Ticker", "Price", "Day%", "DY%", "Ceiling"]
         for row in group_rows:
             ticker = row["ticker"]
-            name = _display_name(ticker)
-            sym = _currency(ticker)
+            name = display_name(ticker)
+            sym = currency(ticker)
             try:
                 ceiling_val = row["user_ceiling"]
             except (KeyError, IndexError):
@@ -92,16 +48,16 @@ def _collect_rows(group_rows: list, show_br: bool) -> tuple[list[str], list[list
                 data_rows.append([name, "—", "—", "—", "—"])
                 continue
             cp = market["current_price"]
-            day_str = _fmt_pct(market.get("day_change_pct", 0.0))
+            day_str = fmt_pct(market.get("day_change_pct", 0.0))
             m = get_br_stock_metrics(ticker, cp)
             dy_str = f"{m['dy_yield']*100:.2f}%" if m["dy_yield"] > 0 else "—"
-            data_rows.append([name, _fmt(cp, sym), day_str, dy_str, _fmt_ceiling(ceiling_val, cp, sym)])
+            data_rows.append([name, fmt(cp, sym), day_str, dy_str, _fmt_ceiling(ceiling_val, cp, sym)])
     else:
         headers = ["Ticker", "Price", "Day%", "Ceiling"]
         for row in group_rows:
             ticker = row["ticker"]
-            name = _display_name(ticker)
-            sym = _currency(ticker)
+            name = display_name(ticker)
+            sym = currency(ticker)
             try:
                 ceiling_val = row["user_ceiling"]
             except (KeyError, IndexError):
@@ -111,37 +67,14 @@ def _collect_rows(group_rows: list, show_br: bool) -> tuple[list[str], list[list
                 data_rows.append([name, "—", "—", "—"])
                 continue
             cp = market["current_price"]
-            day_str = _fmt_pct(market.get("day_change_pct", 0.0))
-            data_rows.append([name, _fmt(cp, sym), day_str, _fmt_ceiling(ceiling_val, cp, sym)])
+            day_str = fmt_pct(market.get("day_change_pct", 0.0))
+            data_rows.append([name, fmt(cp, sym), day_str, _fmt_ceiling(ceiling_val, cp, sym)])
 
     return headers, data_rows
 
 
-def _group_by_subcategory(rows: list) -> list[tuple[str | None, list]]:
-    groups: dict[str | None, list] = {}
-    for row in rows:
-        try:
-            key = row["subcategory"]
-        except (IndexError, KeyError):
-            key = None
-        if key not in groups:
-            groups[key] = []
-        groups[key].append(row)
-
-    ordered = []
-    for key in SUBCATEGORY_ORDER:
-        if key in groups:
-            ordered.append((key, groups[key]))
-    for key, vals in groups.items():
-        if key is not None and key not in SUBCATEGORY_ORDER:
-            ordered.append((key, vals))
-    if None in groups:
-        ordered.append((None, groups[None]))
-    return ordered
-
-
 def _build_section(title: str, rows: list) -> list[str]:
-    groups = _group_by_subcategory(rows)
+    groups = group_by_subcategory(rows, SUBCATEGORY_ORDER)
     if not (len(groups) > 1 or (len(groups) == 1 and groups[0][0] is not None)):
         groups = [(None, rows)]
 
@@ -159,19 +92,19 @@ def _build_section(title: str, rows: list) -> list[str]:
         label = SUBCATEGORY_LABELS.get(key, key) if key else None
         show_br = key == "br-stocks"
         headers, data_rows = _collect_rows(group_rows, show_br)
-        table_str = _render_table(headers, data_rows)
+        table_str = render_table(headers, data_rows)
         if not table_str:
             continue
 
         full_block = _block(table_str, label, not heading_emitted)
 
-        if len(full_block) <= _MSG_LIMIT:
+        if len(full_block) <= MSG_LIMIT:
             if not heading_emitted:
                 messages.append(full_block)
                 heading_emitted = True
             else:
                 plain = _block(table_str, label, False)
-                if messages and len(messages[-1]) + 1 + len(plain) <= _MSG_LIMIT:
+                if messages and len(messages[-1]) + 1 + len(plain) <= MSG_LIMIT:
                     messages[-1] += "\n" + plain
                 else:
                     messages.append(plain)
@@ -184,7 +117,7 @@ def _build_section(title: str, rows: list) -> list[str]:
 
             for dl in table_lines[2:]:
                 candidate_tbl = header_block + "\n" + "\n".join(batch + [dl])
-                if len(_block(candidate_tbl, chunk_label, chunk_with_cat)) > _MSG_LIMIT and batch:
+                if len(_block(candidate_tbl, chunk_label, chunk_with_cat)) > MSG_LIMIT and batch:
                     done_tbl = header_block + "\n" + "\n".join(batch)
                     messages.append(_block(done_tbl, chunk_label, chunk_with_cat))
                     heading_emitted = True
@@ -214,22 +147,6 @@ def _backfill_subcategories(user_id: int, tickers: list) -> list:
     return result
 
 
-def _pack_messages(sections: list[str]) -> list[str]:
-    packed: list[str] = []
-    current = ""
-    for s in sections:
-        if not current:
-            current = s
-        elif len(current) + 1 + len(s) <= _MSG_LIMIT:
-            current += "\n" + s
-        else:
-            packed.append(current)
-            current = s
-    if current:
-        packed.append(current)
-    return packed
-
-
 def _build_market_indicators(has_btc: bool, fg: dict | None) -> list[str]:
     vix = get_vix()
     ibov = get_ibov()
@@ -241,12 +158,12 @@ def _build_market_indicators(has_btc: bool, fg: dict | None) -> list[str]:
     if vix:
         data_rows.append([
             "VIX", "Volatility Index", "Global",
-            f"{vix['level']:.1f}", _fmt_pct(vix['day_change_pct']), vix['status'],
+            f"{vix['level']:.1f}", fmt_pct(vix['day_change_pct']), vix['status'],
         ])
     if ibov:
         data_rows.append([
             "IBOV", "Bovespa Index", "BR/Stocks",
-            f"{ibov['level']:,.0f}", _fmt_pct(ibov['day_change_pct']), "—",
+            f"{ibov['level']:,.0f}", fmt_pct(ibov['day_change_pct']), "—",
         ])
     if has_btc and fg:
         data_rows.append([
@@ -254,9 +171,9 @@ def _build_market_indicators(has_btc: bool, fg: dict | None) -> list[str]:
             str(fg['value']), "—", fg['classification'],
         ])
 
-    table_str = _render_table(headers, data_rows)
+    table_str = render_table(headers, data_rows)
     msg = f"# 📊 Market Indicators\n```\n{table_str}\n```"
-    return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
+    return [msg] if len(msg) <= MSG_LIMIT else [msg[:MSG_LIMIT]]
 
 
 def _build_performance(wallet: list, watchlist: list) -> list[str]:
@@ -266,7 +183,7 @@ def _build_performance(wallet: list, watchlist: list) -> list[str]:
             data = get_ticker_data(row["ticker"])
             if data:
                 out.append({
-                    "name":  _display_name(row["ticker"]),
+                    "name":  display_name(row["ticker"]),
                     "day":   data.get("day_change_pct", 0.0),
                     "week":  data.get("week_change_pct", 0.0),
                     "month": data.get("month_change_pct", 0.0),
@@ -287,7 +204,7 @@ def _build_performance(wallet: list, watchlist: list) -> list[str]:
     for _, items in groups:
         for _, key in [("Day:", "day"), ("Week:", "week"), ("Month:", "month")]:
             best = max(items, key=lambda x: x[key])
-            all_bd.append(f"▲ {best['name']} {_fmt_pct(best[key])}")
+            all_bd.append(f"▲ {best['name']} {fmt_pct(best[key])}")
     COL = max(len(s) for s in all_bd) + 2
 
     lines: list[str] = []
@@ -300,14 +217,14 @@ def _build_performance(wallet: list, watchlist: list) -> list[str]:
             worst = min(items, key=lambda x: x[key])
             if worst["name"] == best["name"]:
                 arrow = "▲" if best[key] >= 0 else "▼"
-                lines.append(f"  {period_label:<7}{arrow} {best['name']} {_fmt_pct(best[key])}")
+                lines.append(f"  {period_label:<7}{arrow} {best['name']} {fmt_pct(best[key])}")
             else:
                 show_best  = best[key] > 0
                 show_worst = worst[key] < 0
                 if not show_best and not show_worst:
                     continue
-                bd = f"▲ {best['name']} {_fmt_pct(best[key])}"
-                wd = f"▼ {worst['name']} {_fmt_pct(worst[key])}"
+                bd = f"▲ {best['name']} {fmt_pct(best[key])}"
+                wd = f"▼ {worst['name']} {fmt_pct(worst[key])}"
                 if show_best and show_worst:
                     lines.append(f"  {period_label:<7}{bd:<{COL}}{wd}")
                 elif show_best:
@@ -317,45 +234,7 @@ def _build_performance(wallet: list, watchlist: list) -> list[str]:
 
     table = "\n".join(lines)
     msg = f"# 📈 Performance\n```\n{table}\n```"
-    return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
-
-
-def _build_proventos_radar(tickers: list) -> list[str]:
-    for row in tickers:
-        ticker = row["ticker"]
-        if ticker.upper().endswith(".SA"):
-            data = get_ticker_data(ticker)
-            if data:
-                get_br_stock_metrics(ticker, data["current_price"])
-        else:
-            get_dividend_info(ticker)
-
-    ticker_names = [row["ticker"] for row in tickers]
-    db_rows = get_proventos_upcoming(ticker_names)
-    if not db_rows:
-        return []
-
-    def _fmt_date(d: str | None) -> str:
-        return d.replace("-", "/") if d else "—"
-
-    headers = ["Ticker", "Ex-Date", "Pay-Date", "Type", "Amount"]
-    data_rows: list[list[str]] = []
-    for row in db_rows:
-        ticker = row["symbol"]
-        sym = _currency(ticker)
-        name = _display_name(ticker)
-        ex_d = _fmt_date(row["ex_date"])
-        pay_d = _fmt_date(row["pay_date"])
-        ptype = row["type"] or "—"
-        amount = row["amount"]
-        amt_str = f"{sym}{amount:,.2f}" if amount else "—"
-        data_rows.append([name, ex_d, pay_d, ptype, amt_str])
-
-    table_str = _render_table(headers, data_rows, required_headers=["Pay-Date", "Type"])
-    if not table_str:
-        return []
-    msg = f"# 📅 Dividends\n```\n{table_str}\n```"
-    return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
+    return [msg] if len(msg) <= MSG_LIMIT else [msg[:MSG_LIMIT]]
 
 
 def _build_opportunities(tickers: list) -> list[str]:
@@ -389,19 +268,19 @@ def _build_opportunities(tickers: list) -> list[str]:
     data_rows = []
     for opp in opportunities:
         ticker = opp["ticker"]
-        sym = _currency(ticker)
-        name = _display_name(ticker)
+        sym = currency(ticker)
+        name = display_name(ticker)
         data_rows.append([
             name,
-            _fmt(opp["current_price"], sym),
-            _fmt(opp["user_ceiling"], sym),
+            fmt(opp["current_price"], sym),
+            fmt(opp["user_ceiling"], sym),
             f"+{opp['margin_pct']:.1f}%",
             opp["category"],
         ])
 
-    table_str = _render_table(headers, data_rows)
+    table_str = render_table(headers, data_rows)
     msg = f"# 🛒 Buy Opportunities\n```\n{table_str}\n```"
-    return [msg] if len(msg) <= _MSG_LIMIT else [msg[:_MSG_LIMIT]]
+    return [msg] if len(msg) <= MSG_LIMIT else [msg[:MSG_LIMIT]]
 
 
 def build_summary(user_id: int, discord_mention: str) -> list[str]:
@@ -423,13 +302,13 @@ def build_summary(user_id: int, discord_mention: str) -> list[str]:
         sections.extend(_build_section("👀 Watchlist", watchlist))
     sections.extend(_build_market_indicators(has_btc, fg))
     sections.extend(_build_performance(wallet, watchlist))
-    sections.extend(_build_proventos_radar(tickers))
+    sections.extend(build_proventos_radar(tickers))
     sections.extend(_build_opportunities(tickers))
 
     if not sections:
         return [f"{discord_mention} Could not fetch data for your tickers."]
 
-    packed = _pack_messages(sections)
+    packed = pack_messages(sections)
     packed[0] = f"{discord_mention} Your summary:\n{packed[0]}"
     return packed
 

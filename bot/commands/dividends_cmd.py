@@ -6,7 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, list_tickers
-from bot.commands.summary import _build_proventos_radar
+from bot.services.dividends import build_proventos_radar
 from bot.utils import defer, followup, mention, perf_start, perf_log
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ class DividendsCog(commands.Cog):
         async with self.bot.heavy_semaphore:
             try:
                 messages = await asyncio.wait_for(
-                    loop.run_in_executor(None, _build_proventos_radar, list(tickers)),
+                    loop.run_in_executor(None, build_proventos_radar, list(tickers)),
                     timeout=60.0,
                 )
             except asyncio.TimeoutError:
