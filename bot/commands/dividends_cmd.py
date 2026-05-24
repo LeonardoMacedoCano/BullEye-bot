@@ -6,7 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, list_tickers
-from bot.services.dividends import build_proventos_radar
+from bot.application.dividends_use_case import build_proventos_radar
 from bot.utils import defer, followup, mention, perf_start, perf_log
 
 logger = logging.getLogger(__name__)

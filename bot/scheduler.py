@@ -10,7 +10,7 @@ from bot.db.repository import (
     get_all_active_schedules, update_last_sent_date,
 )
 from bot.services.market import get_ticker_data
-from bot.commands.summary import build_summary
+from bot.application.summary_use_case import build_summary
 
 logger = logging.getLogger(__name__)
 

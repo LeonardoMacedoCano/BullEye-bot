@@ -1,8 +1,10 @@
+import datetime
 import logging
 import re
 import threading
 import time
 from collections import OrderedDict
+
 import requests
 import yfinance as yf
 
@@ -19,12 +21,6 @@ SUBCATEGORY_LABELS = {
     "stocks": "Stocks",
 }
 
-from bot.config import PRICE_CACHE_TTL as _PRICE_CACHE_TTL, DIV_CACHE_TTL as _DIV_CACHE_TTL
-
-_PRICE_CACHE_MAX = 500
-_price_cache: OrderedDict[str, tuple[dict, float]] = OrderedDict()
-_price_cache_lock = threading.Lock()
-
 _BR_TYPE_MAP = {
     "DIVIDENDO": "Dividendo",
     "JCP": "JSCP",
@@ -32,42 +28,20 @@ _BR_TYPE_MAP = {
     "SUBSCRICAO": "Subscrição",
 }
 
+from bot.config import PRICE_CACHE_TTL as _PRICE_CACHE_TTL
 
-def _ts_to_date(ts) -> str | None:
+_PRICE_CACHE_MAX = 500
+_price_cache: OrderedDict[str, tuple[dict, float]] = OrderedDict()
+_price_cache_lock = threading.Lock()
+
+
+def ts_to_date(ts) -> str | None:
     if not ts:
         return None
     try:
-        import datetime
         return datetime.date.fromtimestamp(int(ts)).isoformat()
     except Exception:
         return None
-
-
-def _fetch_br_proventos(ticker: str, ticker_id: int) -> None:
-    from bot.db.repository import upsert_provento
-    symbol = ticker.upper().replace(".SA", "")
-    try:
-        resp = requests.get(
-            f"https://brapi.dev/api/quote/{symbol}",
-            params={"modules": "dividendsData"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        results = resp.json().get("results", [])
-        if not results:
-            return
-        for div in results[0].get("dividendsData", {}).get("cashDividends", []):
-            ex_date = (div.get("lastDatePrior") or "")[:10]
-            if not ex_date:
-                continue
-            pay_date = (div.get("paymentDate") or "")[:10] or None
-            amount = float(div.get("rate") or 0.0) or None
-            raw_type = (div.get("paymentType") or "").upper()
-            ptype = _BR_TYPE_MAP.get(raw_type, raw_type or "Dividendo")
-            description = div.get("label") or None
-            upsert_provento(ticker_id, ex_date, pay_date, amount, ptype, description)
-    except Exception as exc:
-        logger.debug("brapi proventos fetch failed for %s: %s", ticker, exc)
 
 
 def clear_price_cache() -> int:
@@ -132,7 +106,7 @@ def validate_ticker(ticker: str) -> bool:
     return get_ticker_data(ticker) is not None
 
 
-def _dividends_trailing_12m(ticker: str) -> float:
+def dividends_trailing_12m(ticker: str) -> float:
     try:
         import pandas as pd
         divs = yf.Ticker(ticker).dividends
@@ -145,46 +119,40 @@ def _dividends_trailing_12m(ticker: str) -> float:
         return 0.0
 
 
-def get_br_stock_metrics(ticker: str, current_price: float) -> dict:
-    from bot.db.repository import get_price_cache, set_price_cache, upsert_ticker, upsert_provento
-
-    ticker_id = upsert_ticker(ticker, "br-stocks", None)
-    row = get_price_cache(ticker)
-    stale = row is None or (time.time() - row["updated_at"]) > _DIV_CACHE_TTL
-
-    if stale:
-        try:
-            info     = yf.Ticker(ticker).info
-            dy_rate  = float(info.get("trailingAnnualDividendRate") or 0.0)
-            dy_yield = float(info.get("trailingAnnualDividendYield") or 0.0)
-        except Exception as exc:
-            logger.warning("Failed to fetch .info for %s: %s", ticker, exc)
-            return {"dy_yield": 0.0}
-
-        if dy_rate == 0.0:
-            dy_rate = _dividends_trailing_12m(ticker)
-
-        set_price_cache(ticker, dy_rate, dy_yield)
-        _fetch_br_proventos(ticker, ticker_id)
-
-        from bot.db.repository import get_proventos_for_ticker
-        if not get_proventos_for_ticker(ticker_id):
-            ex_div = _ts_to_date(info.get("exDividendDate"))
-            div_amount = float(info.get("dividendRate") or dy_rate or 0.0)
-            if ex_div:
-                upsert_provento(
-                    ticker_id, ex_div, None,
-                    div_amount if div_amount > 0 else None,
-                    "Dividendo", None,
-                )
-    else:
-        dy_rate  = float(row["dy_rate"] or 0.0)
-        dy_yield = float(row["dy_yield"] or 0.0)
-
-    if dy_yield == 0.0 and dy_rate > 0 and current_price > 0:
-        dy_yield = dy_rate / current_price
-
-    return {"dy_yield": dy_yield}
+def fetch_br_proventos(ticker: str) -> list[dict]:
+    """Fetches proventos from brapi.dev. Returns list of dicts; caller handles DB writes."""
+    symbol = ticker.upper().replace(".SA", "")
+    try:
+        resp = requests.get(
+            f"https://brapi.dev/api/quote/{symbol}",
+            params={"modules": "dividendsData"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+        if not results:
+            return []
+        proventos = []
+        for div in results[0].get("dividendsData", {}).get("cashDividends", []):
+            ex_date = (div.get("lastDatePrior") or "")[:10]
+            if not ex_date:
+                continue
+            pay_date = (div.get("paymentDate") or "")[:10] or None
+            amount = float(div.get("rate") or 0.0) or None
+            raw_type = (div.get("paymentType") or "").upper()
+            ptype = _BR_TYPE_MAP.get(raw_type, raw_type or "Dividendo")
+            description = div.get("label") or None
+            proventos.append({
+                "ex_date": ex_date,
+                "pay_date": pay_date,
+                "amount": amount,
+                "type": ptype,
+                "description": description,
+            })
+        return proventos
+    except Exception as exc:
+        logger.debug("brapi proventos fetch failed for %s: %s", ticker, exc)
+        return []
 
 
 def get_ticker_subcategory(ticker: str) -> str | None:
@@ -201,32 +169,3 @@ def get_ticker_subcategory(ticker: str) -> str | None:
     except Exception:
         pass
     return None
-
-
-def get_dividend_info(ticker: str) -> dict | None:
-    from bot.db.repository import get_price_cache, set_price_cache, upsert_ticker, upsert_provento
-
-    ticker_id = upsert_ticker(ticker, None, None)
-    row = get_price_cache(ticker)
-    stale = row is None or (time.time() - row["updated_at"]) > _DIV_CACHE_TTL
-
-    if stale:
-        try:
-            info         = yf.Ticker(ticker).info
-            dy_rate      = float(info.get("trailingAnnualDividendRate") or 0.0)
-            dy_yield     = float(info.get("trailingAnnualDividendYield") or 0.0)
-            ex_div_date  = _ts_to_date(info.get("exDividendDate"))
-            pay_date_str = _ts_to_date(info.get("payDate") or info.get("dividendDate"))
-            div_amount   = float(info.get("dividendRate") or dy_rate or 0.0)
-            set_price_cache(ticker, dy_rate, dy_yield)
-            if ex_div_date:
-                upsert_provento(
-                    ticker_id, ex_div_date, pay_date_str,
-                    div_amount if div_amount > 0 else None,
-                    "Dividendo", None,
-                )
-        except Exception as exc:
-            logger.warning("Failed to fetch dividend info for %s: %s", ticker, exc)
-            return None
-
-    return {}

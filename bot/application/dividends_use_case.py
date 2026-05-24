@@ -1,7 +1,8 @@
 import logging
 
 from bot.db.repository import get_proventos_upcoming
-from bot.services.market import get_ticker_data, get_br_stock_metrics, get_dividend_info
+from bot.services.market import get_ticker_data
+from bot.application.market_cache import get_br_stock_metrics, get_dividend_info
 from bot.shared.formatting import currency, display_name, render_table, MSG_LIMIT
 
 logger = logging.getLogger(__name__)
