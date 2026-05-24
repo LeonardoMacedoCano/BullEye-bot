@@ -6,7 +6,8 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, list_tickers, clear_price_cache_db, clear_proventos_db
-from bot.services.market import clear_price_cache, get_ticker_data, get_br_stock_metrics, get_dividend_info
+from bot.services.market import clear_price_cache, get_ticker_data
+from bot.application.market_cache import get_br_stock_metrics, get_dividend_info
 from bot.services.fear_greed import clear_fear_greed_cache, get_fear_greed_index
 from bot.utils import defer, followup, mention, perf_start, perf_log
 
