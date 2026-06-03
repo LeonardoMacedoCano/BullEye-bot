@@ -7,7 +7,7 @@ from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, add_ticker, remove_ticker, list_tickers, get_ticker_category
 from bot.services.market import validate_ticker, normalize_ticker, get_ticker_subcategory, SUBCATEGORY_LABELS, SUBCATEGORY_ORDER
-from bot.utils import defer, followup, mention, perf_start, perf_log
+from bot.utils import defer, followup, mention, perf_start, perf_log, ticker_autocomplete
 from bot.shared.formatting import MSG_LIMIT, display_name, currency, render_table, group_by_subcategory
 
 logger = logging.getLogger(__name__)
@@ -159,6 +159,12 @@ class TickerCog(commands.Cog):
             await followup(interaction, f"{m} Ticker `{ticker}` removed.")
             logger.info("User %s removed ticker %s", interaction.user.id, ticker)
         perf_log(logger, "remove", t0)
+
+    @remove.autocomplete("ticker")
+    async def remove_ticker_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return await ticker_autocomplete(interaction, current)
 
     @app_commands.command(name="tickers", description="Show all your tickers with ceiling, alerts and notes")
     async def tickers_cmd(self, interaction: discord.Interaction) -> None:

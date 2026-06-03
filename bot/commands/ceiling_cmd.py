@@ -7,7 +7,7 @@ from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, get_ticker_category, get_ticker_row, set_user_ceiling, clear_user_ceiling
 from bot.services.market import normalize_ticker, get_ticker_data
-from bot.utils import defer, followup, mention, perf_start, perf_log
+from bot.utils import defer, followup, mention, perf_start, perf_log, ticker_autocomplete
 from bot.shared.formatting import currency
 
 logger = logging.getLogger(__name__)
@@ -95,6 +95,12 @@ class CeilingCog(commands.Cog):
         await followup(interaction, f"{m} Ceiling set: `{ticker}` ≤ {sym}{ceiling_val:,.2f}.")
         logger.info("User %s set ceiling for %s to %.2f", interaction.user.id, ticker, ceiling_val)
         perf_log(logger, "ceiling", t0)
+
+    @ceiling.autocomplete("ticker")
+    async def ceiling_ticker_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return await ticker_autocomplete(interaction, current)
 
 
 async def setup(bot: commands.Bot) -> None:

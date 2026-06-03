@@ -7,7 +7,7 @@ from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, get_ticker_category, get_ticker_row, set_user_note, clear_user_note
 from bot.services.market import normalize_ticker
-from bot.utils import defer, followup, mention, perf_start, perf_log
+from bot.utils import defer, followup, mention, perf_start, perf_log, ticker_autocomplete
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,12 @@ class NoteCog(commands.Cog):
         await followup(interaction, f"{m} Note set for `{ticker}`: {text}")
         logger.info("User %s set note for %s", interaction.user.id, ticker)
         perf_log(logger, "note", t0)
+
+    @note.autocomplete("ticker")
+    async def note_ticker_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return await ticker_autocomplete(interaction, current)
 
 
 async def setup(bot: commands.Bot) -> None:

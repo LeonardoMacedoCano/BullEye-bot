@@ -1,8 +1,10 @@
+import asyncio
 import logging
 import time
 from typing import Any
 
 import discord
+from discord import app_commands
 
 from bot.shared.context import new_request_id
 
@@ -64,3 +66,21 @@ def perf_log(logger_instance: logging.Logger, command: str, start: float) -> Non
     """Log elapsed time since start."""
     elapsed = time.perf_counter() - start
     logger_instance.info("Command '%s' completed in %.3fs", command, elapsed)
+
+
+async def ticker_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    from bot.db.repository import get_or_create_user, list_tickers
+    loop = asyncio.get_running_loop()
+    try:
+        user = await loop.run_in_executor(None, get_or_create_user, str(interaction.user.id))
+        rows = await loop.run_in_executor(None, list_tickers, user["id"])
+    except Exception:
+        return []
+    upper = current.upper()
+    return [
+        app_commands.Choice(name=row["ticker"], value=row["ticker"])
+        for row in rows
+        if not upper or upper in row["ticker"]
+    ][:25]

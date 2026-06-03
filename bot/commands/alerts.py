@@ -7,7 +7,7 @@ from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, add_alert, ticker_exists
 from bot.services.market import normalize_ticker
-from bot.utils import defer, followup, mention, perf_start, perf_log
+from bot.utils import defer, followup, mention, perf_start, perf_log, ticker_autocomplete
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,12 @@ class AlertsCog(commands.Cog):
         )
         logger.info("User %s set alert: %s <= %.2f", interaction.user.id, ticker, price)
         perf_log(logger, "alert", t0)
+
+    @alert.autocomplete("ticker")
+    async def alert_ticker_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return await ticker_autocomplete(interaction, current)
 
 
 async def setup(bot: commands.Bot) -> None:
