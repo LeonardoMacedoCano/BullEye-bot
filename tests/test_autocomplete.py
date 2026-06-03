@@ -50,7 +50,8 @@ class TestTickerAutocomplete:
         repo.add_ticker(user["id"], "PETR4.SA", "wallet")
         choices = await ticker_autocomplete(_interaction("3"), "petr")
         assert len(choices) == 1
-        assert choices[0].name == "PETR4.SA"
+        assert choices[0].name == "PETR4"
+        assert choices[0].value == "PETR4.SA"
 
     @pytest.mark.asyncio
     async def test_no_tickers_returns_empty(self):

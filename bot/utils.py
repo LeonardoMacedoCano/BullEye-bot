@@ -68,6 +68,12 @@ def perf_log(logger_instance: logging.Logger, command: str, start: float) -> Non
     logger_instance.info("Command '%s' completed in %.3fs", command, elapsed)
 
 
+def _display_ticker(ticker: str) -> str:
+    if ticker.endswith(".SA"):
+        return ticker[:-3]
+    return ticker
+
+
 async def ticker_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
@@ -80,7 +86,7 @@ async def ticker_autocomplete(
         return []
     upper = current.upper()
     return [
-        app_commands.Choice(name=row["ticker"], value=row["ticker"])
+        app_commands.Choice(name=_display_ticker(row["ticker"]), value=row["ticker"])
         for row in rows
         if not upper or upper in row["ticker"]
     ][:25]
