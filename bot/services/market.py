@@ -180,16 +180,25 @@ def fetch_br_proventos(ticker: str) -> list[dict]:
 
 
 def get_ticker_subcategory(ticker: str) -> str | None:
+    return get_ticker_metadata(ticker)["subcategory"]
+
+
+def get_ticker_metadata(ticker: str) -> dict:
+    base: dict = {"subcategory": None, "sector": None, "industry": None}
     if ticker.upper().endswith(".SA"):
-        return "br-stocks"
+        base["subcategory"] = "br-stocks"
     try:
-        quote_type = yf.Ticker(ticker).info.get("quoteType", "").upper()
-        if quote_type == "CRYPTOCURRENCY":
-            return "crypto"
-        if quote_type == "ETF":
-            return "etf"
-        if quote_type == "EQUITY":
-            return "stocks"
+        info = yf.Ticker(ticker).info
+        qt = info.get("quoteType", "").upper()
+        if base["subcategory"] is None:
+            if qt == "CRYPTOCURRENCY":
+                base["subcategory"] = "crypto"
+            elif qt == "ETF":
+                base["subcategory"] = "etf"
+            elif qt == "EQUITY":
+                base["subcategory"] = "stocks"
+        base["sector"] = info.get("sector") or None
+        base["industry"] = info.get("industry") or None
     except Exception:
         pass
-    return None
+    return base

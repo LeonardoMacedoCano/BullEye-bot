@@ -15,15 +15,23 @@ def get_or_create_user(discord_id: str) -> sqlite3.Row:
         conn.close()
 
 
-def upsert_ticker(symbol: str, subcategory: str | None = None, quote_type: str | None = None) -> int:
+def upsert_ticker(
+    symbol: str,
+    subcategory: str | None = None,
+    quote_type: str | None = None,
+    sector: str | None = None,
+    industry: str | None = None,
+) -> int:
     conn = get_connection()
     try:
         conn.execute(
-            "INSERT INTO tickers (symbol, subcategory, quote_type) VALUES (?, ?, ?) "
+            "INSERT INTO tickers (symbol, subcategory, quote_type, sector, industry) VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT(symbol) DO UPDATE SET "
             "subcategory = COALESCE(excluded.subcategory, subcategory), "
-            "quote_type = COALESCE(excluded.quote_type, quote_type)",
-            (symbol.upper(), subcategory, quote_type),
+            "quote_type = COALESCE(excluded.quote_type, quote_type), "
+            "sector = COALESCE(excluded.sector, sector), "
+            "industry = COALESCE(excluded.industry, industry)",
+            (symbol.upper(), subcategory, quote_type, sector, industry),
         )
         conn.commit()
         row = conn.execute("SELECT id FROM tickers WHERE symbol = ?", (symbol.upper(),)).fetchone()
@@ -32,14 +40,23 @@ def upsert_ticker(symbol: str, subcategory: str | None = None, quote_type: str |
         conn.close()
 
 
-def add_ticker(user_id: int, ticker: str, category: str, subcategory: str | None = None) -> None:
+def add_ticker(
+    user_id: int,
+    ticker: str,
+    category: str,
+    subcategory: str | None = None,
+    sector: str | None = None,
+    industry: str | None = None,
+) -> None:
     conn = get_connection()
     try:
         conn.execute(
-            "INSERT INTO tickers (symbol, subcategory) VALUES (?, ?) "
+            "INSERT INTO tickers (symbol, subcategory, sector, industry) VALUES (?, ?, ?, ?) "
             "ON CONFLICT(symbol) DO UPDATE SET "
-            "subcategory = COALESCE(excluded.subcategory, subcategory)",
-            (ticker.upper(), subcategory),
+            "subcategory = COALESCE(excluded.subcategory, subcategory), "
+            "sector = COALESCE(excluded.sector, sector), "
+            "industry = COALESCE(excluded.industry, industry)",
+            (ticker.upper(), subcategory, sector, industry),
         )
         conn.commit()
         t_row = conn.execute("SELECT id FROM tickers WHERE symbol = ?", (ticker.upper(),)).fetchone()
@@ -81,8 +98,8 @@ def list_tickers(user_id: int) -> list[sqlite3.Row]:
     conn = get_connection()
     try:
         cursor = conn.execute(
-            "SELECT t.symbol AS ticker, ut.category, t.subcategory, ut.user_ceiling, ut.note, "
-            "MIN(a.target_price) AS alert_price "
+            "SELECT t.symbol AS ticker, ut.category, t.subcategory, t.sector, t.industry, "
+            "ut.user_ceiling, ut.note, MIN(a.target_price) AS alert_price "
             "FROM user_tickers ut JOIN tickers t ON ut.ticker_id = t.id "
             "LEFT JOIN alerts a ON a.user_id = ut.user_id AND a.ticker_id = ut.ticker_id AND a.active = 1 "
             "WHERE ut.user_id = ? GROUP BY ut.id ORDER BY ut.category, t.symbol",
@@ -165,6 +182,18 @@ def update_ticker_subcategory(user_id: int, ticker: str, subcategory: str | None
         conn.execute(
             "UPDATE tickers SET subcategory = ? WHERE symbol = ?",
             (subcategory, ticker.upper()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def update_ticker_sector_industry(ticker: str, sector: str | None, industry: str | None) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE tickers SET sector = ?, industry = ? WHERE symbol = ?",
+            (sector, industry, ticker.upper()),
         )
         conn.commit()
     finally:

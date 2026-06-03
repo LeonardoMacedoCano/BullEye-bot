@@ -5,8 +5,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.db.repository import get_or_create_user, list_tickers, clear_price_cache_db, clear_proventos_db
-from bot.services.market import clear_price_cache, get_ticker_data
+from bot.db.repository import get_or_create_user, list_tickers, clear_price_cache_db, clear_proventos_db, update_ticker_sector_industry
+from bot.services.market import clear_price_cache, get_ticker_data, get_ticker_metadata
 from bot.application.market_cache import get_br_stock_metrics, get_dividend_info
 from bot.services.fear_greed import clear_fear_greed_cache, get_fear_greed_index
 from bot.utils import defer, followup, mention, perf_start, perf_log
@@ -37,6 +37,10 @@ def _refresh_all(user_id: int) -> dict:
                 get_br_stock_metrics(ticker, data["current_price"])
             else:
                 get_dividend_info(ticker)
+            if row["sector"] is None and row["industry"] is None:
+                meta = get_ticker_metadata(ticker)
+                if meta["sector"] or meta["industry"]:
+                    update_ticker_sector_industry(ticker, meta["sector"], meta["industry"])
             refreshed += 1
         except Exception as exc:
             logger.warning("Failed to refresh cache for %s: %s", ticker, exc)

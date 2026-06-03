@@ -32,7 +32,9 @@ def init_db() -> None:
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 symbol      TEXT    UNIQUE NOT NULL,
                 subcategory TEXT    DEFAULT NULL,
-                quote_type  TEXT    DEFAULT NULL
+                quote_type  TEXT    DEFAULT NULL,
+                sector      TEXT    DEFAULT NULL,
+                industry    TEXT    DEFAULT NULL
             );
 
             CREATE TABLE IF NOT EXISTS user_tickers (

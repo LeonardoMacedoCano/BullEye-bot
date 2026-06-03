@@ -6,14 +6,13 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, add_ticker, remove_ticker, list_tickers, get_ticker_category
-from bot.services.market import validate_ticker, normalize_ticker, get_ticker_subcategory, SUBCATEGORY_LABELS, SUBCATEGORY_ORDER
+from bot.services.market import validate_ticker, normalize_ticker, get_ticker_metadata, SUBCATEGORY_LABELS, SUBCATEGORY_ORDER
 from bot.utils import defer, followup, mention, perf_start, perf_log, ticker_autocomplete
 from bot.shared.formatting import MSG_LIMIT, display_name, currency, render_table, group_by_subcategory
 
 logger = logging.getLogger(__name__)
 
 VALID_CATEGORIES = ("wallet", "watchlist")
-
 
 def _fmt_price(price: float | None, ticker: str) -> str:
     if price is None:
@@ -28,6 +27,13 @@ def _truncate_note(note: str | None, max_len: int = 80) -> str:
     return note if len(note) <= max_len else note[:max_len - 1] + "…"
 
 
+def _fmt_sector(row) -> str:
+    s = row["sector"] or ""
+    i = row["industry"] or ""
+    combined = f"{s} / {i}" if s and i else s or i
+    return combined or "—"
+
+
 def _build_tickers_section(title: str, rows: list) -> list[str]:
     groups = group_by_subcategory(rows, SUBCATEGORY_ORDER)
     use_groups = len(groups) > 1 or (len(groups) == 1 and groups[0][0] is not None)
@@ -38,7 +44,7 @@ def _build_tickers_section(title: str, rows: list) -> list[str]:
     for key, group_rows in groups:
         label = SUBCATEGORY_LABELS.get(key, key) if key else None
 
-        headers = ["Ticker", "Ceiling", "Alert", "Note"]
+        headers = ["Ticker", "Ceiling", "Alert", "Note", "Sector"]
         data_rows = []
         for row in group_rows:
             ticker = row["ticker"]
@@ -47,6 +53,7 @@ def _build_tickers_section(title: str, rows: list) -> list[str]:
                 _fmt_price(row["user_ceiling"], ticker),
                 _fmt_price(row["alert_price"], ticker),
                 _truncate_note(row["note"]),
+                _fmt_sector(row),
             ])
 
         table_str = render_table(headers, data_rows)
@@ -100,12 +107,12 @@ class TickerCog(commands.Cog):
 
         def _validate():
             valid = validate_ticker(ticker)
-            subcategory = get_ticker_subcategory(ticker) if valid else None
-            return valid, subcategory
+            metadata = get_ticker_metadata(ticker) if valid else {}
+            return valid, metadata
 
         loop = asyncio.get_running_loop()
         try:
-            valid, subcategory = await loop.run_in_executor(None, _validate)
+            valid, metadata = await loop.run_in_executor(None, _validate)
         except Exception:
             logger.exception("Error validating ticker %s", ticker)
             await followup(interaction, f"{m} ❌ Error validating ticker. Please try again.")
@@ -115,6 +122,7 @@ class TickerCog(commands.Cog):
             await followup(interaction, f"{m} Ticker `{ticker}` not found.")
             return
 
+        subcategory = metadata.get("subcategory")
         user = await loop.run_in_executor(None, get_or_create_user, str(interaction.user.id))
         existing = await loop.run_in_executor(None, get_ticker_category, user["id"], ticker)
         if existing == cat_value:
@@ -128,7 +136,10 @@ class TickerCog(commands.Cog):
             )
             return
 
-        await loop.run_in_executor(None, add_ticker, user["id"], ticker, cat_value, subcategory)
+        await loop.run_in_executor(
+            None, add_ticker, user["id"], ticker, cat_value,
+            subcategory, metadata.get("sector"), metadata.get("industry"),
+        )
 
         sub_label = f" ({SUBCATEGORY_LABELS[subcategory]})" if subcategory in SUBCATEGORY_LABELS else ""
         if ticker != original:
