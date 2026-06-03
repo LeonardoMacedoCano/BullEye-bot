@@ -36,6 +36,10 @@ class HelpCog(commands.Cog):
             "`/unschedule` — Cancel your daily summary",
             "`/summary` — Get your current portfolio summary",
             "`/dividends` — Show upcoming dividends (next 60 days) with type, ex-date, pay-date and amount",
+            "`/ceiling_fear_greed <1-100>` — Set your personal Crypto Fear & Greed Index ceiling threshold",
+            "`/ceiling_fear_greed clear` — Remove Fear & Greed ceiling",
+            "`/ceiling_fear_greed` — Show current Fear & Greed Index vs your ceiling",
+            "`/alert_fear_greed <1-100>` — Alert when Fear & Greed Index reaches or drops below target (fires once)",
             "`/refreshcache` — Clear and re-fetch all data caches (prices, dividends, Fear & Greed)",
             "`/help` — Show this message",
         ]

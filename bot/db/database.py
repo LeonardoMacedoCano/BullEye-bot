@@ -81,6 +81,18 @@ def init_db() -> None:
                 updated_at  INTEGER NOT NULL,
                 UNIQUE(ticker_id, ex_date, type)
             );
+
+            CREATE TABLE IF NOT EXISTS user_fgi_ceilings (
+                user_id       INTEGER PRIMARY KEY REFERENCES users(id),
+                ceiling_value INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS fgi_alerts (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id      INTEGER NOT NULL REFERENCES users(id),
+                target_value INTEGER NOT NULL,
+                active       INTEGER NOT NULL DEFAULT 1
+            );
         """)
         logger.info("Database initialized at %s", DATABASE_PATH)
     finally:

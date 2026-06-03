@@ -8,8 +8,10 @@ from bot.config import TIMEZONE as _TZ, TIMEZONE_NAME as _tz_name
 from bot.db.repository import (
     get_active_alerts, deactivate_alert,
     get_all_active_schedules, update_last_sent_date,
+    get_active_fgi_alerts, deactivate_fgi_alert,
 )
 from bot.services.market import get_ticker_data, get_cache_stats
+from bot.services.fear_greed import get_fear_greed_index
 from bot.application.summary_use_case import build_summary
 from bot.shared.context import new_request_id
 
@@ -39,6 +41,7 @@ async def scheduler_loop(bot: discord.Client) -> None:
             )
 
         await _check_alerts(bot)
+        await _check_fgi_alerts(bot)
         await _check_schedules(bot, now_str, today_str)
 
 
@@ -80,6 +83,32 @@ async def _check_alerts(bot: discord.Client) -> None:
 
     tasks = [_bounded(alert) for alert in alerts]
     await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def _check_fgi_alerts(bot: discord.Client) -> None:
+    loop = asyncio.get_running_loop()
+    alerts = await loop.run_in_executor(None, get_active_fgi_alerts)
+    if not alerts:
+        return
+    fgi = await loop.run_in_executor(None, get_fear_greed_index)
+    if fgi is None:
+        return
+    for alert in alerts:
+        if fgi["value"] <= alert["target_value"]:
+            await loop.run_in_executor(None, deactivate_fgi_alert, alert["id"])
+            try:
+                user = await bot.fetch_user(int(alert["discord_id"]))
+                await user.send(
+                    f"{user.mention} Fear & Greed alert triggered: index is at "
+                    f"**{fgi['value']}** ({fgi['classification']}), which reached your target of "
+                    f"**{alert['target_value']}**."
+                )
+                logger.info(
+                    "FGI alert %s triggered for user %s: %d <= %d",
+                    alert["id"], alert["discord_id"], fgi["value"], alert["target_value"],
+                )
+            except Exception as exc:
+                logger.error("Failed to send FGI alert DM to user %s: %s", alert["discord_id"], exc)
 
 
 async def _process_schedule(bot: discord.Client, loop: asyncio.AbstractEventLoop, schedule: dict, today: str) -> None:

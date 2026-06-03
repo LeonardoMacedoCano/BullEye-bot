@@ -44,6 +44,8 @@ COGS = [
     "bot.commands.help_cmd",
     "bot.commands.note_cmd",
     "bot.commands.resetdb_cmd",
+    "bot.commands.ceiling_fear_greed_cmd",
+    "bot.commands.alert_fear_greed_cmd",
 ]
 
 intents = discord.Intents.default()

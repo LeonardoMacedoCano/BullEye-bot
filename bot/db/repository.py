@@ -423,6 +423,71 @@ def clear_proventos_db() -> int:
         conn.close()
 
 
+def set_user_fgi_ceiling(user_id: int, value: int) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO user_fgi_ceilings (user_id, ceiling_value) VALUES (?, ?)",
+            (user_id, value),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def clear_user_fgi_ceiling(user_id: int) -> None:
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM user_fgi_ceilings WHERE user_id = ?", (user_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_user_fgi_ceiling(user_id: int) -> int | None:
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT ceiling_value FROM user_fgi_ceilings WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        return int(row["ceiling_value"]) if row else None
+    finally:
+        conn.close()
+
+
+def add_fgi_alert(user_id: int, target_value: int) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO fgi_alerts (user_id, target_value) VALUES (?, ?)",
+            (user_id, target_value),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_active_fgi_alerts() -> list[sqlite3.Row]:
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            "SELECT fa.*, u.discord_id FROM fgi_alerts fa JOIN users u ON fa.user_id = u.id "
+            "WHERE fa.active = 1"
+        )
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+
+def deactivate_fgi_alert(alert_id: int) -> None:
+    conn = get_connection()
+    try:
+        conn.execute("UPDATE fgi_alerts SET active = 0 WHERE id = ?", (alert_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def get_proventos_upcoming(symbols: list[str], days: int = 60) -> list[sqlite3.Row]:
     from datetime import date, timedelta
     today = date.today().isoformat()
