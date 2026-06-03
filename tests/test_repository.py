@@ -244,3 +244,59 @@ class TestProventos:
         deleted = repo.clear_proventos_db()
         assert deleted == 1
         assert repo.get_proventos_for_ticker(ticker_id) == []
+
+
+class TestTickerSectorIndustry:
+    def test_add_ticker_stores_sector_and_industry(self):
+        user = repo.get_or_create_user("50")
+        repo.add_ticker(user["id"], "AAPL", "wallet", "stocks", "Technology", "Consumer Electronics")
+        rows = repo.list_tickers(user["id"])
+        assert rows[0]["sector"] == "Technology"
+        assert rows[0]["industry"] == "Consumer Electronics"
+
+    def test_add_ticker_without_sector_defaults_to_none(self):
+        user = repo.get_or_create_user("51")
+        repo.add_ticker(user["id"], "BTC-USD", "watchlist")
+        rows = repo.list_tickers(user["id"])
+        assert rows[0]["sector"] is None
+        assert rows[0]["industry"] is None
+
+    def test_list_tickers_exposes_sector_industry_keys(self):
+        user = repo.get_or_create_user("52")
+        repo.add_ticker(user["id"], "MSFT", "wallet", "stocks", "Technology", "Software")
+        rows = repo.list_tickers(user["id"])
+        assert "sector" in rows[0].keys()
+        assert "industry" in rows[0].keys()
+
+    def test_update_ticker_sector_industry(self):
+        user = repo.get_or_create_user("53")
+        repo.add_ticker(user["id"], "PETR4.SA", "wallet")
+        repo.update_ticker_sector_industry("PETR4.SA", "Energy", "Oil & Gas Integrated")
+        rows = repo.list_tickers(user["id"])
+        assert rows[0]["sector"] == "Energy"
+        assert rows[0]["industry"] == "Oil & Gas Integrated"
+
+    def test_update_ticker_sector_industry_clears_to_none(self):
+        user = repo.get_or_create_user("54")
+        repo.add_ticker(user["id"], "VALE3.SA", "wallet", "br-stocks", "Basic Materials", "Mining")
+        repo.update_ticker_sector_industry("VALE3.SA", None, None)
+        rows = repo.list_tickers(user["id"])
+        assert rows[0]["sector"] is None
+        assert rows[0]["industry"] is None
+
+    def test_upsert_ticker_stores_sector_and_industry(self):
+        repo.upsert_ticker("WEGE3.SA", "br-stocks", "EQUITY", "Industrials", "Electrical Equipment & Parts")
+        user = repo.get_or_create_user("55")
+        repo.add_ticker(user["id"], "WEGE3.SA", "wallet")
+        rows = repo.list_tickers(user["id"])
+        assert rows[0]["sector"] == "Industrials"
+        assert rows[0]["industry"] == "Electrical Equipment & Parts"
+
+    def test_upsert_ticker_does_not_overwrite_existing_sector_with_none(self):
+        repo.upsert_ticker("BBAS3.SA", "br-stocks", "EQUITY", "Financial Services", "Banks")
+        repo.upsert_ticker("BBAS3.SA", "br-stocks", "EQUITY", None, None)
+        user = repo.get_or_create_user("56")
+        repo.add_ticker(user["id"], "BBAS3.SA", "wallet")
+        rows = repo.list_tickers(user["id"])
+        assert rows[0]["sector"] == "Financial Services"
+        assert rows[0]["industry"] == "Banks"
