@@ -1,7 +1,7 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from bot.db.repository import get_or_create_user, list_tickers, update_ticker_subcategory
+from bot.db.repository import get_or_create_user, list_tickers, update_ticker_subcategory, get_user_fgi_ceiling
 from bot.services.market import get_ticker_data, get_ticker_subcategory, SUBCATEGORY_ORDER, SUBCATEGORY_LABELS
 from bot.application.market_cache import get_br_stock_metrics
 from bot.application.dividends_use_case import build_proventos_radar
@@ -140,7 +140,7 @@ def _backfill_subcategories(user_id: int, tickers: list) -> list:
     return result
 
 
-def _build_market_indicators(has_btc: bool, fg: dict | None) -> list[str]:
+def _build_market_indicators(has_btc: bool, fg: dict | None, fgi_ceiling: int | None) -> list[str]:
     vix = get_vix()
     ibov = get_ibov()
     if not vix and not ibov and not (has_btc and fg):
@@ -159,9 +159,15 @@ def _build_market_indicators(has_btc: bool, fg: dict | None) -> list[str]:
             f"{ibov['level']:,.0f}", fmt_pct(ibov['day_change_pct']), "—",
         ])
     if has_btc and fg:
+        if fgi_ceiling is not None:
+            delta = fgi_ceiling - fg['value']
+            sign = "+" if delta >= 0 else ""
+            status = f"{fg['classification']} (ceil:{fgi_ceiling} {sign}{delta})"
+        else:
+            status = fg['classification']
         data_rows.append([
             "F&G", "Fear & Greed", "Crypto/BTC",
-            str(fg['value']), "—", fg['classification'],
+            str(fg['value']), "—", status,
         ])
 
     table_str = render_table(headers, data_rows)
@@ -230,7 +236,7 @@ def _build_performance(wallet: list, watchlist: list) -> list[str]:
     return [msg] if len(msg) <= MSG_LIMIT else [msg[:MSG_LIMIT]]
 
 
-def _build_opportunities(tickers: list) -> list[str]:
+def _build_opportunities(tickers: list, fg: dict | None = None, fgi_ceiling: int | None = None) -> list[str]:
     opportunities = []
     for row in tickers:
         try:
@@ -252,27 +258,37 @@ def _build_opportunities(tickers: list) -> list[str]:
                 "category": row["category"],
             })
 
-    if not opportunities:
+    fgi_triggered = fg and fgi_ceiling is not None and fg['value'] <= fgi_ceiling
+
+    if not opportunities and not fgi_triggered:
         return []
 
-    opportunities.sort(key=lambda x: x["margin_pct"], reverse=True)
+    parts = ["# 🛒 Buy Opportunities"]
 
-    headers = ["Ticker", "Price", "Ceiling", "Margin", "In"]
-    data_rows = []
-    for opp in opportunities:
-        ticker = opp["ticker"]
-        sym = currency(ticker)
-        name = display_name(ticker)
-        data_rows.append([
-            name,
-            fmt(opp["current_price"], sym),
-            fmt(opp["user_ceiling"], sym),
-            f"+{opp['margin_pct']:.1f}%",
-            opp["category"],
-        ])
+    if opportunities:
+        opportunities.sort(key=lambda x: x["margin_pct"], reverse=True)
+        headers = ["Ticker", "Price", "Ceiling", "Margin", "In"]
+        data_rows = []
+        for opp in opportunities:
+            ticker = opp["ticker"]
+            sym = currency(ticker)
+            name = display_name(ticker)
+            data_rows.append([
+                name,
+                fmt(opp["current_price"], sym),
+                fmt(opp["user_ceiling"], sym),
+                f"+{opp['margin_pct']:.1f}%",
+                opp["category"],
+            ])
+        parts.append(f"```\n{render_table(headers, data_rows)}\n```")
 
-    table_str = render_table(headers, data_rows)
-    msg = f"# 🛒 Buy Opportunities\n```\n{table_str}\n```"
+    if fgi_triggered:
+        delta = fgi_ceiling - fg['value']
+        fgi_headers = ["Ticker", "F&G Index", "Ceiling", "Below", "Status"]
+        fgi_rows = [["BTC", str(fg['value']), str(fgi_ceiling), f"+{delta}", fg['classification']]]
+        parts.append(f"```\n{render_table(fgi_headers, fgi_rows)}\n```")
+
+    msg = "\n".join(parts)
     return [msg] if len(msg) <= MSG_LIMIT else [msg[:MSG_LIMIT]]
 
 
@@ -303,16 +319,17 @@ def build_summary(user_id: int, discord_mention: str) -> list[str]:
     has_btc   = any(row["ticker"].upper() == "BTC-USD" for row in tickers)
 
     fg = get_fear_greed_index() if has_btc else None
+    fgi_ceiling = get_user_fgi_ceiling(user_id)
 
     sections: list[str] = []
     if wallet:
         sections.extend(_build_section("💼 Wallet", wallet))
     if watchlist:
         sections.extend(_build_section("👀 Watchlist", watchlist))
-    sections.extend(_build_market_indicators(has_btc, fg))
+    sections.extend(_build_market_indicators(has_btc, fg, fgi_ceiling))
     sections.extend(_build_performance(wallet, watchlist))
     sections.extend(build_proventos_radar(tickers))
-    sections.extend(_build_opportunities(tickers))
+    sections.extend(_build_opportunities(tickers, fg, fgi_ceiling))
 
     if not sections:
         return [f"{discord_mention} Could not fetch data for your tickers."]

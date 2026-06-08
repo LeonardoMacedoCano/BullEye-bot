@@ -71,6 +71,7 @@ class TestBuildSummaryWithTickers:
              patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="stocks"), \
              patch("bot.application.summary_use_case.update_ticker_subcategory"), \
              patch("bot.application.summary_use_case.get_fear_greed_index", return_value=None), \
+             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=None), \
              patch("bot.application.summary_use_case.get_vix", return_value=None), \
              patch("bot.application.summary_use_case.get_ibov", return_value=None), \
              patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
@@ -85,6 +86,7 @@ class TestBuildSummaryWithTickers:
              patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="stocks"), \
              patch("bot.application.summary_use_case.update_ticker_subcategory"), \
              patch("bot.application.summary_use_case.get_fear_greed_index", return_value=None), \
+             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=None), \
              patch("bot.application.summary_use_case.get_vix", return_value=None), \
              patch("bot.application.summary_use_case.get_ibov", return_value=None), \
              patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
@@ -98,6 +100,7 @@ class TestBuildSummaryWithTickers:
              patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="stocks"), \
              patch("bot.application.summary_use_case.update_ticker_subcategory"), \
              patch("bot.application.summary_use_case.get_fear_greed_index", return_value=None), \
+             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=None), \
              patch("bot.application.summary_use_case.get_vix", return_value=None), \
              patch("bot.application.summary_use_case.get_ibov", return_value=None), \
              patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
@@ -114,6 +117,7 @@ class TestBuildSummaryWithTickers:
              patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="stocks"), \
              patch("bot.application.summary_use_case.update_ticker_subcategory"), \
              patch("bot.application.summary_use_case.get_fear_greed_index", return_value=None), \
+             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=None), \
              patch("bot.application.summary_use_case.get_vix", return_value=None), \
              patch("bot.application.summary_use_case.get_ibov", return_value=None), \
              patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
@@ -128,9 +132,61 @@ class TestBuildSummaryWithTickers:
              patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="stocks"), \
              patch("bot.application.summary_use_case.update_ticker_subcategory"), \
              patch("bot.application.summary_use_case.get_fear_greed_index", return_value=None), \
+             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=None), \
              patch("bot.application.summary_use_case.get_vix", return_value=None), \
              patch("bot.application.summary_use_case.get_ibov", return_value=None), \
              patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
             result = build_summary(1, "@user")
         combined = "\n".join(result)
         assert "Opportunities" in combined or "AAPL" in combined
+
+    def test_fgi_ceiling_shown_in_market_indicators(self):
+        rows = [_make_ticker_row("BTC-USD", "wallet", "crypto")]
+        fg_data = {"value": 30, "classification": "Fear"}
+        with patch("bot.application.summary_use_case.list_tickers", return_value=rows), \
+             patch("bot.application.summary_use_case.get_ticker_data", return_value=_mock_ticker_data("BTC-USD")), \
+             patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="crypto"), \
+             patch("bot.application.summary_use_case.update_ticker_subcategory"), \
+             patch("bot.application.summary_use_case.get_fear_greed_index", return_value=fg_data), \
+             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=45), \
+             patch("bot.application.summary_use_case.get_vix", return_value=None), \
+             patch("bot.application.summary_use_case.get_ibov", return_value=None), \
+             patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
+            result = build_summary(1, "@user")
+        combined = "\n".join(result)
+        assert "ceil:45" in combined
+
+    def test_fgi_ceiling_opportunity_when_below(self):
+        rows = [_make_ticker_row("BTC-USD", "wallet", "crypto")]
+        fg_data = {"value": 20, "classification": "Extreme Fear"}
+        with patch("bot.application.summary_use_case.list_tickers", return_value=rows), \
+             patch("bot.application.summary_use_case.get_ticker_data", return_value=_mock_ticker_data("BTC-USD")), \
+             patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="crypto"), \
+             patch("bot.application.summary_use_case.update_ticker_subcategory"), \
+             patch("bot.application.summary_use_case.get_fear_greed_index", return_value=fg_data), \
+             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=45), \
+             patch("bot.application.summary_use_case.get_vix", return_value=None), \
+             patch("bot.application.summary_use_case.get_ibov", return_value=None), \
+             patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
+            result = build_summary(1, "@user")
+        combined = "\n".join(result)
+        assert "Buy Opportunities" in combined
+        assert "BTC" in combined
+        assert "+25" in combined
+
+    def test_fgi_ceiling_no_opportunity_when_above(self):
+        rows = [_make_ticker_row("BTC-USD", "wallet", "crypto")]
+        fg_data = {"value": 70, "classification": "Greed"}
+        with patch("bot.application.summary_use_case.list_tickers", return_value=rows), \
+             patch("bot.application.summary_use_case.get_ticker_data", return_value=_mock_ticker_data("BTC-USD")), \
+             patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="crypto"), \
+             patch("bot.application.summary_use_case.update_ticker_subcategory"), \
+             patch("bot.application.summary_use_case.get_fear_greed_index", return_value=fg_data), \
+             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=45), \
+             patch("bot.application.summary_use_case.get_vix", return_value=None), \
+             patch("bot.application.summary_use_case.get_ibov", return_value=None), \
+             patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
+            result = build_summary(1, "@user")
+        combined = "\n".join(result)
+        assert "ceil:45" in combined
+        assert "Buy Opportunities" not in combined
