@@ -26,11 +26,17 @@ bot/
 ├── db/
 │   ├── database.py   # SQLite schema init
 │   └── repository.py # All DB access functions
+├── application/       # Use cases — plain structured data (dicts/lists), no Discord objects
+│   ├── summary_use_case.py   # build_summary
+│   ├── dividends_use_case.py # get_dividends_rows
+│   ├── ticker_use_case.py    # get_ticker_groups
+│   └── market_cache.py       # DY yield / dividend info caching
 ├── shared/
 │   ├── formatting.py     # display_name, currency, fmt, ansi_pct, render_table
 │   ├── embeds.py         # EMBED_COLOR / COLOR_UP / COLOR_DOWN, wrap_table_field()
 │   ├── summary_embed.py  # build_portfolio_embed, build_intelligence_embed
 │   ├── dividends_embed.py# dividends_field_value, build_dividends_embed
+│   ├── tickers_embed.py  # build_tickers_embed
 │   ├── help_embed.py     # build_help_embed
 │   └── cache_embed.py    # build_cache_embed
 └── services/

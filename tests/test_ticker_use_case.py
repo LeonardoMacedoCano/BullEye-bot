@@ -1,4 +1,4 @@
-from bot.commands.ticker import _fmt_sector
+from bot.application.ticker_use_case import _fmt_sector
 
 
 def _row(sector, industry):

@@ -14,6 +14,7 @@ MODULES = [
     "bot.commands.ticker",
     "bot.application.summary_use_case",
     "bot.application.dividends_use_case",
+    "bot.application.ticker_use_case",
     "bot.application.market_cache",
     "bot.services.market",
     "bot.services.fear_greed",
@@ -26,6 +27,7 @@ MODULES = [
     "bot.shared.dividends_embed",
     "bot.shared.help_embed",
     "bot.shared.cache_embed",
+    "bot.shared.tickers_embed",
     "bot.db.repository",
     "bot.scheduler",
 ]
