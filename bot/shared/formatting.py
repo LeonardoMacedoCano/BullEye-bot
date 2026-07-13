@@ -1,12 +1,33 @@
 from __future__ import annotations
 
+import re
+
 MSG_LIMIT = 1900
+
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def strip_ansi(text: str) -> str:
+    return _ANSI_ESCAPE.sub("", text)
+
+
+def ansi_pct(pct: float) -> str:
+    """fmt_pct wrapped in ANSI green/red for Discord ansi code blocks."""
+    text = fmt_pct(pct)
+    if pct > 0:
+        return f"\x1b[2;32m{text}\x1b[0m"
+    if pct < 0:
+        return f"\x1b[2;31m{text}\x1b[0m"
+    return text
 
 
 def display_name(ticker: str) -> str:
-    if ticker.upper() == "BTC-USD":
-        return "BTC"
-    return ticker[:-3] if ticker.upper().endswith(".SA") else ticker
+    t = ticker.upper()
+    if t.endswith("-USD"):
+        return t[:-4]  # BTC-USD → BTC, ETH-USD → ETH, SOL-USD → SOL
+    if t.endswith(".SA"):
+        return ticker[:-3]  # PETR4.SA → PETR4
+    return ticker
 
 
 def currency(ticker: str) -> str:
@@ -30,20 +51,24 @@ def render_table(
     required = set(required_headers or [])
     active = [
         i for i in range(len(headers))
-        if headers[i] in required or any(r[i] != "—" for r in rows)
+        if headers[i] in required or any(strip_ansi(r[i]) != "—" for r in rows)
     ]
     if not active:
         return ""
     widths = [
-        max(len(headers[i]), max((len(r[i]) for r in rows), default=0)) + 1
+        max(len(headers[i]), max((len(strip_ansi(r[i])) for r in rows), default=0)) + 1
         for i in active
     ]
     header_line = "".join(f"{headers[i]:<{w}}" for i, w in zip(active, widths))
     sep = "─" * sum(widths)
-    data_lines = [
-        "".join(f"{r[i]:<{w}}" for i, w in zip(active, widths))
-        for r in rows
-    ]
+    data_lines = []
+    for r in rows:
+        parts = []
+        for i, w in zip(active, widths):
+            val = r[i]
+            pad = w - len(strip_ansi(val))
+            parts.append(val + " " * pad)
+        data_lines.append("".join(parts))
     return "\n".join([header_line, sep] + data_lines)
 
 

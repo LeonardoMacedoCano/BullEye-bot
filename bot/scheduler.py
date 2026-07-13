@@ -13,6 +13,7 @@ from bot.db.repository import (
 from bot.services.market import get_ticker_data, get_cache_stats
 from bot.services.fear_greed import get_fear_greed_index
 from bot.application.summary_use_case import build_summary
+from bot.shared.summary_embed import build_portfolio_embed, build_intelligence_embed
 from bot.shared.context import new_request_id
 
 logger = logging.getLogger(__name__)
@@ -115,9 +116,27 @@ async def _process_schedule(bot: discord.Client, loop: asyncio.AbstractEventLoop
     rid = new_request_id()
     try:
         user = await bot.fetch_user(int(schedule["discord_id"]))
-        messages = await loop.run_in_executor(None, build_summary, schedule["user_id"], user.mention)
-        for msg in messages:
-            await user.send(msg)
+        result = await loop.run_in_executor(None, build_summary, schedule["user_id"], user.mention)
+
+        if result.get("empty"):
+            await user.send(f"{user.mention} You have no tickers configured.")
+            return
+
+        embeds: list[discord.Embed] = []
+
+        portfolio_embed = build_portfolio_embed(result)
+        if portfolio_embed:
+            embeds.append(portfolio_embed)
+
+        intel_embed = build_intelligence_embed(result)
+        if intel_embed:
+            embeds.append(intel_embed)
+
+        if embeds:
+            await user.send(embeds=embeds)
+        else:
+            await user.send(f"{user.mention} Could not fetch data for your tickers.")
+
         await loop.run_in_executor(None, update_last_sent_date, schedule["user_id"], today)
         logger.info("[%s] Daily summary sent to user %s", rid, schedule["discord_id"])
     except Exception as exc:
