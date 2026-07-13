@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import patch, MagicMock
 from bot.application.summary_use_case import build_summary
 
@@ -27,166 +26,119 @@ def _mock_ticker_data(ticker, price=100.0):
     }
 
 
+def _patched(rows, ticker_data_map=None, fg=None, fgi_ceiling=None, dividends=None):
+    def fake_get_ticker_data(ticker):
+        if ticker_data_map is not None:
+            return ticker_data_map.get(ticker)
+        return _mock_ticker_data(ticker)
+
+    return patch.multiple(
+        "bot.application.summary_use_case",
+        list_tickers=MagicMock(return_value=rows),
+        get_ticker_data=MagicMock(side_effect=fake_get_ticker_data),
+        get_ticker_subcategory=MagicMock(return_value="stocks"),
+        update_ticker_subcategory=MagicMock(),
+        get_fear_greed_index=MagicMock(return_value=fg),
+        get_user_fgi_ceiling=MagicMock(return_value=fgi_ceiling),
+        get_vix=MagicMock(return_value=None),
+        get_ibov=MagicMock(return_value=None),
+        get_dividends_rows=MagicMock(return_value=dividends or []),
+    )
+
+
 class TestBuildSummaryEmptyTickers:
-    def test_returns_single_message_when_no_tickers(self):
+    def test_returns_empty_result_when_no_tickers(self):
         with patch("bot.application.summary_use_case.list_tickers", return_value=[]):
             result = build_summary(1, "@user")
-        assert len(result) == 1
-        assert "no tickers" in result[0].lower()
-
-    def test_message_includes_mention(self):
-        with patch("bot.application.summary_use_case.list_tickers", return_value=[]):
-            result = build_summary(1, "@alice")
-        assert "@alice" in result[0]
-
-    def test_message_includes_add_command_hint(self):
-        with patch("bot.application.summary_use_case.list_tickers", return_value=[]):
-            result = build_summary(1, "@user")
-        assert "/add" in result[0]
+        assert result == {"empty": True, "mention": "@user"}
 
 
 class TestBuildSummaryWithTickers:
-    def _patch_all(self, rows, ticker_data_map=None):
-        """Returns a dict of patches for a clean summary call."""
-        def fake_get_ticker_data(ticker):
-            if ticker_data_map:
-                return ticker_data_map.get(ticker)
-            return _mock_ticker_data(ticker)
-
-        return {
-            "bot.application.summary_use_case.list_tickers": rows,
-            "bot.application.summary_use_case.get_ticker_data": fake_get_ticker_data,
-            "bot.application.summary_use_case.get_ticker_subcategory": lambda t: "stocks",
-            "bot.application.summary_use_case.update_ticker_subcategory": MagicMock(),
-            "bot.application.summary_use_case.get_fear_greed_index": lambda: None,
-            "bot.application.summary_use_case.get_vix": lambda: None,
-            "bot.application.summary_use_case.get_ibov": lambda: None,
-            "bot.application.summary_use_case.build_proventos_radar": lambda t: [],
+    def test_returns_dict_with_expected_keys(self):
+        rows = [_make_ticker_row("AAPL", "wallet", "stocks")]
+        with _patched(rows):
+            result = build_summary(1, "@user")
+        assert result["empty"] is False
+        assert result["mention"] == "@user"
+        assert set(result) == {
+            "empty", "mention", "wallet_groups", "watchlist_groups",
+            "avg_day_change", "market", "performance", "dividends", "opportunities",
         }
 
-    def test_returns_list_of_strings(self):
+    def test_wallet_ticker_appears_in_wallet_groups(self):
         rows = [_make_ticker_row("AAPL", "wallet", "stocks")]
-        with patch("bot.application.summary_use_case.list_tickers", return_value=rows), \
-             patch("bot.application.summary_use_case.get_ticker_data", return_value=_mock_ticker_data("AAPL")), \
-             patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="stocks"), \
-             patch("bot.application.summary_use_case.update_ticker_subcategory"), \
-             patch("bot.application.summary_use_case.get_fear_greed_index", return_value=None), \
-             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=None), \
-             patch("bot.application.summary_use_case.get_vix", return_value=None), \
-             patch("bot.application.summary_use_case.get_ibov", return_value=None), \
-             patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
+        with _patched(rows):
             result = build_summary(1, "@user")
-        assert isinstance(result, list)
-        assert all(isinstance(m, str) for m in result)
+        assert len(result["wallet_groups"]) == 1
+        assert "AAPL" in result["wallet_groups"][0]["table_str"]
+        assert result["watchlist_groups"] == []
 
-    def test_first_message_starts_with_mention(self):
+    def test_no_market_data_does_not_crash(self):
         rows = [_make_ticker_row("AAPL", "wallet", "stocks")]
-        with patch("bot.application.summary_use_case.list_tickers", return_value=rows), \
-             patch("bot.application.summary_use_case.get_ticker_data", return_value=_mock_ticker_data("AAPL")), \
-             patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="stocks"), \
-             patch("bot.application.summary_use_case.update_ticker_subcategory"), \
-             patch("bot.application.summary_use_case.get_fear_greed_index", return_value=None), \
-             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=None), \
-             patch("bot.application.summary_use_case.get_vix", return_value=None), \
-             patch("bot.application.summary_use_case.get_ibov", return_value=None), \
-             patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
+        with _patched(rows, ticker_data_map={}):
             result = build_summary(1, "@user")
-        assert result[0].startswith("@user")
-
-    def test_no_data_returns_fallback_message(self):
-        rows = [_make_ticker_row("AAPL", "wallet", "stocks")]
-        with patch("bot.application.summary_use_case.list_tickers", return_value=rows), \
-             patch("bot.application.summary_use_case.get_ticker_data", return_value=None), \
-             patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="stocks"), \
-             patch("bot.application.summary_use_case.update_ticker_subcategory"), \
-             patch("bot.application.summary_use_case.get_fear_greed_index", return_value=None), \
-             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=None), \
-             patch("bot.application.summary_use_case.get_vix", return_value=None), \
-             patch("bot.application.summary_use_case.get_ibov", return_value=None), \
-             patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
-            result = build_summary(1, "@user")
-        assert len(result) >= 1
-        combined = " ".join(result)
-        assert "@user" in combined
-
-    def test_all_messages_within_limit(self):
-        from bot.shared.formatting import MSG_LIMIT
-        rows = [_make_ticker_row("AAPL", "wallet", "stocks")]
-        with patch("bot.application.summary_use_case.list_tickers", return_value=rows), \
-             patch("bot.application.summary_use_case.get_ticker_data", return_value=_mock_ticker_data("AAPL")), \
-             patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="stocks"), \
-             patch("bot.application.summary_use_case.update_ticker_subcategory"), \
-             patch("bot.application.summary_use_case.get_fear_greed_index", return_value=None), \
-             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=None), \
-             patch("bot.application.summary_use_case.get_vix", return_value=None), \
-             patch("bot.application.summary_use_case.get_ibov", return_value=None), \
-             patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
-            result = build_summary(1, "@user")
-        for msg in result:
-            assert len(msg) <= MSG_LIMIT
+        assert result["empty"] is False
+        assert result["avg_day_change"] is None
 
     def test_buy_opportunity_included_when_below_ceiling(self):
         rows = [_make_ticker_row("AAPL", "wallet", "stocks", ceiling=200.0)]
-        with patch("bot.application.summary_use_case.list_tickers", return_value=rows), \
-             patch("bot.application.summary_use_case.get_ticker_data", return_value=_mock_ticker_data("AAPL", price=150.0)), \
-             patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="stocks"), \
-             patch("bot.application.summary_use_case.update_ticker_subcategory"), \
-             patch("bot.application.summary_use_case.get_fear_greed_index", return_value=None), \
-             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=None), \
-             patch("bot.application.summary_use_case.get_vix", return_value=None), \
-             patch("bot.application.summary_use_case.get_ibov", return_value=None), \
-             patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
+        with _patched(rows, ticker_data_map={"AAPL": _mock_ticker_data("AAPL", price=150.0)}):
             result = build_summary(1, "@user")
-        combined = "\n".join(result)
-        assert "Opportunities" in combined or "AAPL" in combined
+        opps = result["opportunities"]["ticker_opps"]
+        assert len(opps) == 1
+        assert opps[0]["name"] == "AAPL"
+        assert opps[0]["margin"] == "+33.3%"
 
-    def test_fgi_ceiling_shown_in_market_indicators(self):
+    def test_no_opportunity_when_above_ceiling(self):
+        rows = [_make_ticker_row("AAPL", "wallet", "stocks", ceiling=100.0)]
+        with _patched(rows, ticker_data_map={"AAPL": _mock_ticker_data("AAPL", price=150.0)}):
+            result = build_summary(1, "@user")
+        assert result["opportunities"]["ticker_opps"] == []
+
+    def test_fgi_ceiling_included_in_market_data(self):
         rows = [_make_ticker_row("BTC-USD", "wallet", "crypto")]
         fg_data = {"value": 30, "classification": "Fear"}
-        with patch("bot.application.summary_use_case.list_tickers", return_value=rows), \
-             patch("bot.application.summary_use_case.get_ticker_data", return_value=_mock_ticker_data("BTC-USD")), \
-             patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="crypto"), \
-             patch("bot.application.summary_use_case.update_ticker_subcategory"), \
-             patch("bot.application.summary_use_case.get_fear_greed_index", return_value=fg_data), \
-             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=45), \
-             patch("bot.application.summary_use_case.get_vix", return_value=None), \
-             patch("bot.application.summary_use_case.get_ibov", return_value=None), \
-             patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
+        with _patched(
+            rows,
+            ticker_data_map={"BTC-USD": _mock_ticker_data("BTC-USD")},
+            fg=fg_data,
+            fgi_ceiling=45,
+        ):
             result = build_summary(1, "@user")
-        combined = "\n".join(result)
-        assert "ceil:45" in combined
+        assert result["market"]["fgi"]["value"] == 30
+        assert result["market"]["fgi"]["fgi_ceiling"] == 45
 
-    def test_fgi_ceiling_opportunity_when_below(self):
+    def test_fgi_opportunity_triggered_when_below_ceiling(self):
         rows = [_make_ticker_row("BTC-USD", "wallet", "crypto")]
         fg_data = {"value": 20, "classification": "Extreme Fear"}
-        with patch("bot.application.summary_use_case.list_tickers", return_value=rows), \
-             patch("bot.application.summary_use_case.get_ticker_data", return_value=_mock_ticker_data("BTC-USD")), \
-             patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="crypto"), \
-             patch("bot.application.summary_use_case.update_ticker_subcategory"), \
-             patch("bot.application.summary_use_case.get_fear_greed_index", return_value=fg_data), \
-             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=45), \
-             patch("bot.application.summary_use_case.get_vix", return_value=None), \
-             patch("bot.application.summary_use_case.get_ibov", return_value=None), \
-             patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
+        with _patched(
+            rows,
+            ticker_data_map={"BTC-USD": _mock_ticker_data("BTC-USD")},
+            fg=fg_data,
+            fgi_ceiling=45,
+        ):
             result = build_summary(1, "@user")
-        combined = "\n".join(result)
-        assert "Buy Opportunities" in combined
-        assert "BTC" in combined
-        assert "+25" in combined
+        opps = result["opportunities"]
+        assert opps["fgi_triggered"] is True
+        assert opps["fgi_data"] == {"value": 20, "ceiling": 45, "classification": "Extreme Fear"}
 
-    def test_fgi_ceiling_no_opportunity_when_above(self):
+    def test_fgi_opportunity_not_triggered_when_above_ceiling(self):
         rows = [_make_ticker_row("BTC-USD", "wallet", "crypto")]
         fg_data = {"value": 70, "classification": "Greed"}
-        with patch("bot.application.summary_use_case.list_tickers", return_value=rows), \
-             patch("bot.application.summary_use_case.get_ticker_data", return_value=_mock_ticker_data("BTC-USD")), \
-             patch("bot.application.summary_use_case.get_ticker_subcategory", return_value="crypto"), \
-             patch("bot.application.summary_use_case.update_ticker_subcategory"), \
-             patch("bot.application.summary_use_case.get_fear_greed_index", return_value=fg_data), \
-             patch("bot.application.summary_use_case.get_user_fgi_ceiling", return_value=45), \
-             patch("bot.application.summary_use_case.get_vix", return_value=None), \
-             patch("bot.application.summary_use_case.get_ibov", return_value=None), \
-             patch("bot.application.summary_use_case.build_proventos_radar", return_value=[]):
+        with _patched(
+            rows,
+            ticker_data_map={"BTC-USD": _mock_ticker_data("BTC-USD")},
+            fg=fg_data,
+            fgi_ceiling=45,
+        ):
             result = build_summary(1, "@user")
-        combined = "\n".join(result)
-        assert "ceil:45" in combined
-        assert "Buy Opportunities" not in combined
+        assert result["opportunities"]["fgi_triggered"] is False
+
+    def test_dividends_rows_passed_through(self):
+        rows = [_make_ticker_row("AAPL", "wallet", "stocks")]
+        fake_dividends = [
+            {"name": "AAPL", "ex_date": "01/01", "pay_date": "02/01", "type": "Dividend", "amount": "$1.00"}
+        ]
+        with _patched(rows, dividends=fake_dividends):
+            result = build_summary(1, "@user")
+        assert result["dividends"] == fake_dividends

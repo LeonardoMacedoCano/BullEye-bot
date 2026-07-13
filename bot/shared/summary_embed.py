@@ -3,32 +3,9 @@ from __future__ import annotations
 import datetime
 import discord
 
-from bot.shared.formatting import fmt_pct, ansi_pct, strip_ansi
-
-EMBED_COLOR = discord.Color.from_rgb(47, 128, 237)
-_COLOR_UP   = discord.Color.from_rgb(0, 188, 94)
-_COLOR_DOWN = discord.Color.from_rgb(220, 50, 60)
-_FIELD_LIMIT = 900
-
-
-def _wrap_table(table_str: str) -> str:
-    value = f"```ansi\n{table_str}\n```"
-    if len(strip_ansi(value)) <= _FIELD_LIMIT:
-        return value
-    lines = table_str.split("\n")
-    header = "\n".join(lines[:2])
-    data_lines = lines[2:]
-    kept: list[str] = []
-    for line in data_lines:
-        candidate = f"```ansi\n{header}\n" + "\n".join(kept + [line, "… +99 more"]) + "\n```"
-        if len(strip_ansi(candidate)) > _FIELD_LIMIT:
-            break
-        kept.append(line)
-    truncated = len(data_lines) - len(kept)
-    body = "\n".join(kept)
-    if truncated:
-        body += f"\n… +{truncated} more"
-    return f"```ansi\n{header}\n{body}\n```"
+from bot.shared.formatting import ansi_pct, strip_ansi
+from bot.shared.embeds import EMBED_COLOR, COLOR_UP, COLOR_DOWN, wrap_table_field
+from bot.shared.dividends_embed import dividends_field_value
 
 
 def build_portfolio_embed(data: dict) -> discord.Embed | None:
@@ -40,9 +17,9 @@ def build_portfolio_embed(data: dict) -> discord.Embed | None:
     avg_change = data.get("avg_day_change")
     if avg_change is not None:
         if avg_change > 0.5:
-            color = _COLOR_UP
+            color = COLOR_UP
         elif avg_change < -0.5:
-            color = _COLOR_DOWN
+            color = COLOR_DOWN
         else:
             color = EMBED_COLOR
     else:
@@ -54,11 +31,11 @@ def build_portfolio_embed(data: dict) -> discord.Embed | None:
 
     for group in wallet_groups:
         label = "💼 Wallet" + (f" · {group['label']}" if group["label"] else "")
-        embed.add_field(name=label, value=_wrap_table(group["table_str"]), inline=False)
+        embed.add_field(name=label, value=wrap_table_field(group["table_str"]), inline=False)
 
     for group in watchlist_groups:
         label = "👀 Watchlist" + (f" · {group['label']}" if group["label"] else "")
-        embed.add_field(name=label, value=_wrap_table(group["table_str"]), inline=False)
+        embed.add_field(name=label, value=wrap_table_field(group["table_str"]), inline=False)
 
     return embed
 
@@ -122,18 +99,6 @@ def _performance_field_value(performance: dict) -> str | None:
     return ("```ansi\n" + "\n".join(lines) + "\n```") if lines else None
 
 
-def _dividends_field_value(dividends: list) -> str:
-    name_w = max((len(d["name"]) for d in dividends), default=6)
-    indent = " " * (name_w + 2)
-    lines: list[str] = []
-    for d in dividends:
-        lines.append(f"{d['name']:<{name_w}}  {d['ex_date']} → {d['pay_date']}")
-        amt = d["amount"]
-        amt_colored = f"\x1b[2;32m{amt}\x1b[0m" if amt != "—" else amt
-        lines.append(f"{indent}{amt_colored}  {d['type']}")
-    return "```ansi\n" + "\n".join(lines) + "\n```"
-
-
 def _opportunities_field_value(opportunities: dict) -> str | None:
     ticker_opps = opportunities.get("ticker_opps", [])
     fgi_triggered = opportunities.get("fgi_triggered", False)
@@ -184,7 +149,7 @@ def build_intelligence_embed(
     if dividends:
         embed.add_field(
             name="📅 Upcoming Dividends",
-            value=_dividends_field_value(dividends),
+            value=dividends_field_value(dividends),
             inline=False,
         )
 

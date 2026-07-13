@@ -1,14 +1,13 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from bot.db.repository import (
-    list_tickers, update_ticker_subcategory, get_user_fgi_ceiling, get_proventos_upcoming,
-)
+from bot.db.repository import list_tickers, update_ticker_subcategory, get_user_fgi_ceiling
 from bot.services.market import get_ticker_data, get_ticker_subcategory, SUBCATEGORY_ORDER, SUBCATEGORY_LABELS
-from bot.application.market_cache import get_br_stock_metrics, get_dividend_info
+from bot.application.market_cache import get_br_stock_metrics
+from bot.application.dividends_use_case import get_dividends_rows
 from bot.services.fear_greed import get_fear_greed_index
 from bot.services.sentiment import get_vix, get_ibov
-from bot.shared.formatting import display_name, currency, fmt, fmt_pct, ansi_pct, render_table, group_by_subcategory
+from bot.shared.formatting import display_name, currency, fmt, ansi_pct, render_table, group_by_subcategory
 
 logger = logging.getLogger(__name__)
 
@@ -128,38 +127,6 @@ def _get_performance_data(wallet: list, watchlist: list) -> dict | None:
     return {"groups": groups} if groups else None
 
 
-def _get_dividends_rows(tickers: list) -> list[dict]:
-    for row in tickers:
-        ticker = row["ticker"]
-        if ticker.upper().endswith(".SA"):
-            data = get_ticker_data(ticker)
-            if data:
-                get_br_stock_metrics(ticker, data["current_price"])
-        else:
-            get_dividend_info(ticker)
-
-    ticker_names = [row["ticker"] for row in tickers]
-    db_rows = get_proventos_upcoming(ticker_names)
-
-    result = []
-    for row in db_rows:
-        ticker = row["symbol"]
-        sym = currency(ticker)
-        name = display_name(ticker)
-        ex_d = row["ex_date"].replace("-", "/") if row["ex_date"] else "—"
-        pay_d = row["pay_date"].replace("-", "/") if row["pay_date"] else "—"
-        amount = row["amount"]
-        amt_str = f"{sym}{amount:,.2f}" if amount else "—"
-        result.append({
-            "name": name,
-            "ex_date": ex_d,
-            "pay_date": pay_d,
-            "type": row["type"] or "—",
-            "amount": amt_str,
-        })
-    return result
-
-
 def _get_opportunities_data(tickers: list, fg: dict | None, fgi_ceiling: int | None) -> dict:
     ticker_opps = []
     for row in tickers:
@@ -254,6 +221,6 @@ def build_summary(user_id: int, discord_mention: str) -> dict:
         "avg_day_change": _compute_avg_day_change(wallet),
         "market": _get_market_data(has_btc, fg, fgi_ceiling),
         "performance": _get_performance_data(wallet, watchlist),
-        "dividends": _get_dividends_rows(tickers),
+        "dividends": get_dividends_rows(tickers),
         "opportunities": _get_opportunities_data(tickers, fg, fgi_ceiling),
     }

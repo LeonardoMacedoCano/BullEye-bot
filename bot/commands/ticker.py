@@ -6,75 +6,14 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, add_ticker, remove_ticker, list_tickers, get_ticker_category
-from bot.services.market import validate_ticker, normalize_ticker, get_ticker_metadata, SUBCATEGORY_LABELS, SUBCATEGORY_ORDER
+from bot.services.market import validate_ticker, normalize_ticker, get_ticker_metadata, SUBCATEGORY_LABELS
 from bot.utils import defer, followup, mention, perf_start, perf_log, ticker_autocomplete
-from bot.shared.formatting import MSG_LIMIT, display_name, currency, render_table, group_by_subcategory
+from bot.application.ticker_use_case import get_ticker_groups
+from bot.shared.tickers_embed import build_tickers_embed
 
 logger = logging.getLogger(__name__)
 
 VALID_CATEGORIES = ("wallet", "watchlist")
-
-def _fmt_price(price: float | None, ticker: str) -> str:
-    if price is None:
-        return "—"
-    sym = currency(ticker)
-    return f"{sym}{price:,.2f}"
-
-
-def _truncate_note(note: str | None, max_len: int = 80) -> str:
-    if not note:
-        return "—"
-    return note if len(note) <= max_len else note[:max_len - 1] + "…"
-
-
-def _fmt_sector(row) -> str:
-    s = row["sector"] or ""
-    i = row["industry"] or ""
-    combined = f"{s} / {i}" if s and i else s or i
-    return combined or "—"
-
-
-def _build_tickers_section(title: str, rows: list) -> list[str]:
-    groups = group_by_subcategory(rows, SUBCATEGORY_ORDER)
-    use_groups = len(groups) > 1 or (len(groups) == 1 and groups[0][0] is not None)
-
-    messages: list[str] = []
-    heading_emitted = False
-
-    for key, group_rows in groups:
-        label = SUBCATEGORY_LABELS.get(key, key) if key else None
-
-        headers = ["Ticker", "Ceiling", "Alert", "Note", "Sector"]
-        data_rows = []
-        for row in group_rows:
-            ticker = row["ticker"]
-            data_rows.append([
-                display_name(ticker),
-                _fmt_price(row["user_ceiling"], ticker),
-                _fmt_price(row["alert_price"], ticker),
-                _truncate_note(row["note"]),
-                _fmt_sector(row),
-            ])
-
-        table_str = render_table(headers, data_rows)
-        if not table_str:
-            continue
-
-        parts = []
-        if not heading_emitted:
-            parts.append(f"# {title}")
-            heading_emitted = True
-        if use_groups and label:
-            parts.append(f"- **{label}**")
-        parts.append(f"```\n{table_str}\n```")
-        block = "\n".join(parts)
-
-        if messages and len(messages[-1]) + 1 + len(block) <= MSG_LIMIT:
-            messages[-1] += "\n" + block
-        else:
-            messages.append(block)
-
-    return messages
 
 
 class TickerCog(commands.Cog):
@@ -197,29 +136,12 @@ class TickerCog(commands.Cog):
         wallet = [row for row in rows if row["category"] == "wallet"]
         watchlist = [row for row in rows if row["category"] == "watchlist"]
 
-        sections: list[str] = []
-        if wallet:
-            sections.extend(_build_tickers_section("💼 Wallet", wallet))
-        if watchlist:
-            sections.extend(_build_tickers_section("👀 Watchlist", watchlist))
+        embed = build_tickers_embed(get_ticker_groups(wallet), get_ticker_groups(watchlist))
+        if not embed:
+            await followup(interaction, f"{m} Could not fetch data for your tickers.")
+            return
 
-        packed: list[str] = []
-        current = ""
-        for s in sections:
-            if not current:
-                current = s
-            elif len(current) + 1 + len(s) <= MSG_LIMIT:
-                current += "\n" + s
-            else:
-                packed.append(current)
-                current = s
-        if current:
-            packed.append(current)
-
-        packed[0] = f"{m} Your tickers:\n{packed[0]}"
-        for msg in packed:
-            await followup(interaction, msg)
-
+        await followup(interaction, m, embed=embed)
         perf_log(logger, "tickers", t0)
 
 

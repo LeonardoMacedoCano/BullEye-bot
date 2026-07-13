@@ -6,7 +6,8 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db.repository import get_or_create_user, list_tickers
-from bot.application.dividends_use_case import build_proventos_radar
+from bot.application.dividends_use_case import get_dividends_rows
+from bot.shared.dividends_embed import build_dividends_embed
 from bot.utils import defer, followup, mention, perf_start, perf_log
 
 logger = logging.getLogger(__name__)
@@ -34,8 +35,8 @@ class DividendsCog(commands.Cog):
 
         async with self.bot.heavy_semaphore:
             try:
-                messages = await asyncio.wait_for(
-                    loop.run_in_executor(None, build_proventos_radar, list(tickers)),
+                rows = await asyncio.wait_for(
+                    loop.run_in_executor(None, get_dividends_rows, list(tickers)),
                     timeout=60.0,
                 )
             except asyncio.TimeoutError:
@@ -46,13 +47,12 @@ class DividendsCog(commands.Cog):
                 await followup(interaction, f"{m} ❌ Error fetching dividends. Please try again.")
                 return
 
-        if not messages:
+        embed = build_dividends_embed(rows)
+        if not embed:
             await followup(interaction, f"{m} No upcoming dividends in the next 60 days.")
             return
 
-        messages[0] = f"{m} " + messages[0]
-        for msg in messages:
-            await followup(interaction, msg)
+        await followup(interaction, m, embed=embed)
         logger.info("Dividends sent to user %s", interaction.user.id)
         perf_log(logger, "dividends", t0)
 
