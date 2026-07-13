@@ -54,49 +54,20 @@ All commands are slash commands — type `/` in Discord to see autocomplete sugg
 
 ## What a summary looks like
 
-```
-@you Your summary:
+`/summary` sends two Discord embeds:
 
-# 💼 Wallet
-- **BR Stocks**
+**📊 Portfolio** — one field per group (Wallet / Watchlist, split further by subcategory when you hold BR stocks, crypto, ETFs, etc.), each a compact price table with day change color-coded green/red:
+
+```
 Ticker  Price      Day%   DY%    Ceiling
 ─────────────────────────────────────────
 PETR4   R$38.10    +1.2%  6.54%  —
 VALE3   R$56.40    -0.5%  8.21%  R$60.00 +6%
-
-- **Crypto**
-Ticker  Price          Day%
-───────────────────────────
-BTC     $97,200.00     +3.1%
-
-# 👀 Watchlist
-Ticker  Price     Day%
-──────────────────────
-AAPL    $213.50   +0.8%
-
-# 📊 Market Indicators
-Index  Description       Region      Value   Day%   Status
-───────────────────────────────────────────────────────────
-VIX    Volatility Index  Global      18.5    +2.1%  Moderate
-IBOV   Bovespa Index     BR/Stocks   131450  -0.8%  —
-F&G    Fear & Greed      Crypto/BTC  65      —      Greed
-
-# 📈 Performance
-  Day:    ▲ PETR4 +1.2%    ▼ VALE3 -0.5%
-  Week:   ▲ BTC   +5.3%    ▼ AAPL  -1.1%
-  Month:  ▲ VALE3 +8.4%    ▼ PETR4 -2.1%
-
-# 📅 Dividends
-Ticker  Ex-Date     Pay-Date    Type       Amount
-─────────────────────────────────────────────────
-PETR4   2026/05/15  2026/05/30  Dividendo  R$1.25
-PETR4   2026/05/15  2026/06/10  JCP        R$0.45
-
-# 🛒 Buy Opportunities
-Ticker  Price      Ceiling   Margin  In
-────────────────────────────────────────
-VALE3   R$56.40    R$60.00   +6.4%   wallet
 ```
+
+**📈 Market Intelligence** — VIX/IBOV/Fear & Greed indicators, best & worst performers by day/week/month, upcoming dividends, and buy opportunities (tickers at or below your ceiling), each as its own field.
+
+`/dividends`, `/tickers`, `/help`, and `/refreshcache` also render as embeds; other commands (`/alert`, `/ceiling`, `/note`, `/schedule`, etc.) reply with a plain one-line confirmation.
 
 ---
 
@@ -139,7 +110,7 @@ python -m bot.main
 pytest
 ```
 
-109 tests covering formatting utilities, market normalization, all database operations, and the summary use case. A dedicated import smoke test verifies every module loads without error, catching broken imports before they reach the container.
+Covers formatting utilities, market normalization, database operations, and the use case layer (summary, dividends, tickers). A dedicated import smoke test verifies every module loads without error, catching broken imports before they reach the container.
 
 ---
 
