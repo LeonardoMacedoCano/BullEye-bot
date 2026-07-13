@@ -21,6 +21,11 @@ MODULES = [
     "bot.shared.formatting",
     "bot.shared.context",
     "bot.shared.retry",
+    "bot.shared.embeds",
+    "bot.shared.summary_embed",
+    "bot.shared.dividends_embed",
+    "bot.shared.help_embed",
+    "bot.shared.cache_embed",
     "bot.db.repository",
     "bot.scheduler",
 ]
