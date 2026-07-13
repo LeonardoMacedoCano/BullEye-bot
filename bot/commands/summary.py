@@ -8,6 +8,7 @@ from discord.ext import commands
 from bot.utils import defer, followup, mention, perf_start, perf_log
 from bot.db.repository import get_or_create_user
 from bot.application.summary_use_case import build_summary
+from bot.shared.summary_embed import build_portfolio_embed, build_intelligence_embed
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +27,33 @@ class SummaryCog(commands.Cog):
         user = await loop.run_in_executor(None, get_or_create_user, str(interaction.user.id))
         async with self.bot.heavy_semaphore:
             try:
-                messages = await asyncio.wait_for(
+                result = await asyncio.wait_for(
                     loop.run_in_executor(None, build_summary, user["id"], m),
                     timeout=120.0,
                 )
-                for msg in messages:
-                    await followup(interaction, msg)
+
+                if result.get("empty"):
+                    await followup(
+                        interaction,
+                        f"{m} You have no tickers. Use `/add <TICKER>` to get started.",
+                    )
+                    return
+
+                embeds: list[discord.Embed] = []
+
+                portfolio_embed = build_portfolio_embed(result)
+                if portfolio_embed:
+                    embeds.append(portfolio_embed)
+
+                intel_embed = build_intelligence_embed(result)
+                if intel_embed:
+                    embeds.append(intel_embed)
+
+                if not embeds:
+                    await followup(interaction, f"{m} Could not fetch data for your tickers.")
+                    return
+
+                await followup(interaction, m, embeds=embeds)
                 logger.info("Summary sent to user %s", interaction.user.id)
                 perf_log(logger, "summary", t0)
             except asyncio.TimeoutError:
