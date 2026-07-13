@@ -3,12 +3,12 @@ import logging
 from bot.db.repository import get_proventos_upcoming
 from bot.services.market import get_ticker_data
 from bot.application.market_cache import get_br_stock_metrics, get_dividend_info
-from bot.shared.formatting import currency, display_name, render_table, MSG_LIMIT
+from bot.shared.formatting import currency, display_name
 
 logger = logging.getLogger(__name__)
 
 
-def build_proventos_radar(tickers: list) -> list[str]:
+def get_dividends_rows(tickers: list) -> list[dict]:
     for row in tickers:
         ticker = row["ticker"]
         if ticker.upper().endswith(".SA"):
@@ -20,27 +20,21 @@ def build_proventos_radar(tickers: list) -> list[str]:
 
     ticker_names = [row["ticker"] for row in tickers]
     db_rows = get_proventos_upcoming(ticker_names)
-    if not db_rows:
-        return []
 
-    def _fmt_date(d: str | None) -> str:
-        return d.replace("-", "/") if d else "—"
-
-    headers = ["Ticker", "Ex-Date", "Pay-Date", "Type", "Amount"]
-    data_rows: list[list[str]] = []
+    result = []
     for row in db_rows:
         ticker = row["symbol"]
         sym = currency(ticker)
         name = display_name(ticker)
-        ex_d = _fmt_date(row["ex_date"])
-        pay_d = _fmt_date(row["pay_date"])
-        ptype = row["type"] or "—"
+        ex_d = row["ex_date"].replace("-", "/") if row["ex_date"] else "—"
+        pay_d = row["pay_date"].replace("-", "/") if row["pay_date"] else "—"
         amount = row["amount"]
         amt_str = f"{sym}{amount:,.2f}" if amount else "—"
-        data_rows.append([name, ex_d, pay_d, ptype, amt_str])
-
-    table_str = render_table(headers, data_rows, required_headers=["Pay-Date", "Type"])
-    if not table_str:
-        return []
-    msg = f"# 📅 Dividends\n```\n{table_str}\n```"
-    return [msg] if len(msg) <= MSG_LIMIT else [msg[:MSG_LIMIT]]
+        result.append({
+            "name": name,
+            "ex_date": ex_d,
+            "pay_date": pay_d,
+            "type": row["type"] or "—",
+            "amount": amt_str,
+        })
+    return result
