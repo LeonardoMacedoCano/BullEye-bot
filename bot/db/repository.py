@@ -1,18 +1,15 @@
 import sqlite3
 import time
-from bot.db.database import get_connection
+from bot.db.database import connection
 
 
 def get_or_create_user(discord_id: str) -> sqlite3.Row:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.cursor()
         cursor.execute("INSERT OR IGNORE INTO users (discord_id) VALUES (?)", (discord_id,))
         conn.commit()
         cursor.execute("SELECT * FROM users WHERE discord_id = ?", (discord_id,))
         return cursor.fetchone()
-    finally:
-        conn.close()
 
 
 def upsert_ticker(
@@ -22,8 +19,7 @@ def upsert_ticker(
     sector: str | None = None,
     industry: str | None = None,
 ) -> int:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "INSERT INTO tickers (symbol, subcategory, quote_type, sector, industry) VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT(symbol) DO UPDATE SET "
@@ -36,8 +32,6 @@ def upsert_ticker(
         conn.commit()
         row = conn.execute("SELECT id FROM tickers WHERE symbol = ?", (symbol.upper(),)).fetchone()
         return row["id"]
-    finally:
-        conn.close()
 
 
 def add_ticker(
@@ -48,8 +42,7 @@ def add_ticker(
     sector: str | None = None,
     industry: str | None = None,
 ) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "INSERT INTO tickers (symbol, subcategory, sector, industry) VALUES (?, ?, ?, ?) "
             "ON CONFLICT(symbol) DO UPDATE SET "
@@ -65,13 +58,10 @@ def add_ticker(
             (user_id, t_row["id"], category),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def remove_ticker(user_id: int, ticker: str) -> int:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.cursor()
         t_row = cursor.execute(
             "SELECT id FROM tickers WHERE symbol = ?", (ticker.upper(),)
@@ -90,13 +80,10 @@ def remove_ticker(user_id: int, ticker: str) -> int:
         )
         conn.commit()
         return count
-    finally:
-        conn.close()
 
 
 def list_tickers(user_id: int) -> list[sqlite3.Row]:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.execute(
             "SELECT t.symbol AS ticker, ut.category, t.subcategory, t.sector, t.industry, "
             "ut.user_ceiling, ut.note, MIN(a.target_price) AS alert_price "
@@ -106,13 +93,10 @@ def list_tickers(user_id: int) -> list[sqlite3.Row]:
             (user_id,),
         )
         return cursor.fetchall()
-    finally:
-        conn.close()
 
 
 def get_ticker_row(user_id: int, ticker: str) -> sqlite3.Row | None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.execute(
             "SELECT t.symbol AS ticker, ut.category, t.subcategory, ut.user_ceiling, ut.note "
             "FROM user_tickers ut JOIN tickers t ON ut.ticker_id = t.id "
@@ -120,89 +104,68 @@ def get_ticker_row(user_id: int, ticker: str) -> sqlite3.Row | None:
             (user_id, ticker.upper()),
         )
         return cursor.fetchone()
-    finally:
-        conn.close()
 
 
 def set_user_ceiling(user_id: int, ticker: str, ceiling: float) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "UPDATE user_tickers SET user_ceiling = ? "
             "WHERE user_id = ? AND ticker_id = (SELECT id FROM tickers WHERE symbol = ?)",
             (ceiling, user_id, ticker.upper()),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def clear_user_ceiling(user_id: int, ticker: str) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "UPDATE user_tickers SET user_ceiling = NULL "
             "WHERE user_id = ? AND ticker_id = (SELECT id FROM tickers WHERE symbol = ?)",
             (user_id, ticker.upper()),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def set_user_note(user_id: int, ticker: str, note: str) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "UPDATE user_tickers SET note = ? "
             "WHERE user_id = ? AND ticker_id = (SELECT id FROM tickers WHERE symbol = ?)",
             (note, user_id, ticker.upper()),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def clear_user_note(user_id: int, ticker: str) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "UPDATE user_tickers SET note = NULL "
             "WHERE user_id = ? AND ticker_id = (SELECT id FROM tickers WHERE symbol = ?)",
             (user_id, ticker.upper()),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def update_ticker_subcategory(user_id: int, ticker: str, subcategory: str | None) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "UPDATE tickers SET subcategory = ? WHERE symbol = ?",
             (subcategory, ticker.upper()),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def update_ticker_sector_industry(ticker: str, sector: str | None, industry: str | None) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "UPDATE tickers SET sector = ?, industry = ? WHERE symbol = ?",
             (sector, industry, ticker.upper()),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def get_ticker_category(user_id: int, ticker: str) -> str | None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.execute(
             "SELECT ut.category FROM user_tickers ut JOIN tickers t ON ut.ticker_id = t.id "
             "WHERE ut.user_id = ? AND t.symbol = ?",
@@ -210,26 +173,20 @@ def get_ticker_category(user_id: int, ticker: str) -> str | None:
         )
         row = cursor.fetchone()
         return row["category"] if row else None
-    finally:
-        conn.close()
 
 
 def ticker_exists(user_id: int, ticker: str) -> bool:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.execute(
             "SELECT 1 FROM user_tickers ut JOIN tickers t ON ut.ticker_id = t.id "
             "WHERE ut.user_id = ? AND t.symbol = ?",
             (user_id, ticker.upper()),
         )
         return cursor.fetchone() is not None
-    finally:
-        conn.close()
 
 
 def add_alert(user_id: int, ticker: str, target_price: float) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         t_row = conn.execute(
             "SELECT id FROM tickers WHERE symbol = ?", (ticker.upper(),)
         ).fetchone()
@@ -240,13 +197,10 @@ def add_alert(user_id: int, ticker: str, target_price: float) -> None:
             (user_id, t_row["id"], target_price),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def get_active_alerts(user_id: int | None = None) -> list[sqlite3.Row]:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         if user_id is not None:
             cursor = conn.execute(
                 "SELECT a.*, u.discord_id, t.symbol AS ticker "
@@ -263,96 +217,72 @@ def get_active_alerts(user_id: int | None = None) -> list[sqlite3.Row]:
                 "WHERE a.active = 1"
             )
         return cursor.fetchall()
-    finally:
-        conn.close()
 
 
 def deactivate_alert(alert_id: int) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute("UPDATE alerts SET active = 0 WHERE id = ?", (alert_id,))
         conn.commit()
-    finally:
-        conn.close()
 
 
 def set_schedule(user_id: int, time: str) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "INSERT INTO schedules (user_id, time, active) VALUES (?, ?, 1) "
             "ON CONFLICT(user_id) DO UPDATE SET time = excluded.time, active = 1",
             (user_id, time),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def get_schedule(user_id: int) -> sqlite3.Row | None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.execute(
             "SELECT * FROM schedules WHERE user_id = ? AND active = 1", (user_id,)
         )
         return cursor.fetchone()
-    finally:
-        conn.close()
 
 
 def deactivate_schedule(user_id: int) -> int:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE schedules SET active = 0 WHERE user_id = ? AND active = 1", (user_id,)
         )
         conn.commit()
         return cursor.rowcount
-    finally:
-        conn.close()
 
 
 def get_all_active_schedules() -> list[sqlite3.Row]:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.execute(
             "SELECT s.*, u.discord_id FROM schedules s JOIN users u ON s.user_id = u.id "
             "WHERE s.active = 1"
         )
         return cursor.fetchall()
-    finally:
-        conn.close()
 
 
 def update_last_sent_date(user_id: int, date_str: str) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "UPDATE schedules SET last_sent_date = ? WHERE user_id = ? AND active = 1",
             (date_str, user_id),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def get_price_cache(ticker: str) -> sqlite3.Row | None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.execute(
             "SELECT pc.* FROM ticker_price_cache pc JOIN tickers t ON pc.ticker_id = t.id "
             "WHERE t.symbol = ?",
             (ticker.upper(),),
         )
         return cursor.fetchone()
-    finally:
-        conn.close()
 
 
 def set_price_cache(ticker: str, dy_rate: float, dy_yield: float) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO tickers (symbol) VALUES (?)", (ticker.upper(),)
         )
@@ -364,18 +294,13 @@ def set_price_cache(ticker: str, dy_rate: float, dy_yield: float) -> None:
             (t_row["id"], dy_rate, dy_yield, int(time.time())),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def clear_price_cache_db() -> int:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.execute("DELETE FROM ticker_price_cache")
         conn.commit()
         return cursor.rowcount
-    finally:
-        conn.close()
 
 
 def upsert_provento(
@@ -386,8 +311,7 @@ def upsert_provento(
     ptype: str | None,
     description: str | None,
 ) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "INSERT INTO proventos (ticker_id, ex_date, pay_date, amount, type, description, updated_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?) "
@@ -397,95 +321,69 @@ def upsert_provento(
             (ticker_id, ex_date, pay_date, amount, ptype, description, int(time.time())),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def get_proventos_for_ticker(ticker_id: int) -> list[sqlite3.Row]:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.execute(
             "SELECT * FROM proventos WHERE ticker_id = ? ORDER BY ex_date DESC LIMIT 10",
             (ticker_id,),
         )
         return cursor.fetchall()
-    finally:
-        conn.close()
 
 
 def clear_proventos_db() -> int:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.execute("DELETE FROM proventos")
         conn.commit()
         return cursor.rowcount
-    finally:
-        conn.close()
 
 
 def set_user_fgi_ceiling(user_id: int, value: int) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO user_fgi_ceilings (user_id, ceiling_value) VALUES (?, ?)",
             (user_id, value),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def clear_user_fgi_ceiling(user_id: int) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute("DELETE FROM user_fgi_ceilings WHERE user_id = ?", (user_id,))
         conn.commit()
-    finally:
-        conn.close()
 
 
 def get_user_fgi_ceiling(user_id: int) -> int | None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         row = conn.execute(
             "SELECT ceiling_value FROM user_fgi_ceilings WHERE user_id = ?", (user_id,)
         ).fetchone()
         return int(row["ceiling_value"]) if row else None
-    finally:
-        conn.close()
 
 
 def add_fgi_alert(user_id: int, target_value: int) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute(
             "INSERT INTO fgi_alerts (user_id, target_value) VALUES (?, ?)",
             (user_id, target_value),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def get_active_fgi_alerts() -> list[sqlite3.Row]:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.execute(
             "SELECT fa.*, u.discord_id FROM fgi_alerts fa JOIN users u ON fa.user_id = u.id "
             "WHERE fa.active = 1"
         )
         return cursor.fetchall()
-    finally:
-        conn.close()
 
 
 def deactivate_fgi_alert(alert_id: int) -> None:
-    conn = get_connection()
-    try:
+    with connection() as conn:
         conn.execute("UPDATE fgi_alerts SET active = 0 WHERE id = ?", (alert_id,))
         conn.commit()
-    finally:
-        conn.close()
 
 
 def get_proventos_upcoming(symbols: list[str], days: int = 60) -> list[sqlite3.Row]:
@@ -496,8 +394,7 @@ def get_proventos_upcoming(symbols: list[str], days: int = 60) -> list[sqlite3.R
     if not upper:
         return []
     placeholders = ",".join("?" * len(upper))
-    conn = get_connection()
-    try:
+    with connection() as conn:
         cursor = conn.execute(
             f"SELECT t.symbol, p.ex_date, p.pay_date, p.amount, p.type "
             f"FROM proventos p JOIN tickers t ON p.ticker_id = t.id "
@@ -508,5 +405,3 @@ def get_proventos_upcoming(symbols: list[str], days: int = 60) -> list[sqlite3.R
             (*upper, today, limit),
         )
         return cursor.fetchall()
-    finally:
-        conn.close()

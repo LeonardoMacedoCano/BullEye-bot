@@ -1,6 +1,8 @@
 import os
 import sqlite3
 import logging
+from contextlib import contextmanager
+from typing import Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +14,16 @@ def get_connection() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=5000")
     return conn
+
+
+@contextmanager
+def connection() -> Iterator[sqlite3.Connection]:
+    """Open a connection for the duration of the block and always close it."""
+    conn = get_connection()
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def init_db() -> None:
