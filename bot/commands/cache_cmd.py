@@ -5,8 +5,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.db.repository import get_or_create_user, list_tickers, clear_price_cache_db, clear_proventos_db, update_ticker_sector_industry
-from bot.services.market import clear_price_cache, get_ticker_data, get_ticker_metadata
+from bot.db.repository import (
+    get_or_create_user, list_tickers, update_ticker_sector_industry,
+    clear_price_cache_db_for_tickers, clear_proventos_for_tickers,
+)
+from bot.services.market import clear_price_cache_for, get_ticker_data, get_ticker_metadata
 from bot.application.market_cache import get_br_stock_metrics, get_dividend_info
 from bot.services.fear_greed import clear_fear_greed_cache, get_fear_greed_index
 from bot.utils import defer, followup, mention, perf_start, perf_log
@@ -16,14 +19,16 @@ logger = logging.getLogger(__name__)
 
 
 def _refresh_all(user_id: int) -> dict:
-    from bot.db.repository import list_tickers as _list
+    tickers = list(list_tickers(user_id))
+    symbols = [row["ticker"] for row in tickers]
 
-    clear_price_cache()
-    clear_price_cache_db()
-    clear_proventos_db()
+    # Only this user's own tickers are wiped — other users' cached data is left
+    # untouched so their next command doesn't pay for a refetch they didn't ask for.
+    clear_price_cache_for(symbols)
+    clear_price_cache_db_for_tickers(symbols)
+    clear_proventos_for_tickers(symbols)
     clear_fear_greed_cache()
 
-    tickers = list(_list(user_id))
     refreshed = 0
     failed = 0
 

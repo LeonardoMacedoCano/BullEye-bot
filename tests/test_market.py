@@ -1,6 +1,10 @@
 import pytest
 from unittest.mock import patch
-from bot.services.market import normalize_ticker, ts_to_date, get_ticker_metadata, get_ticker_subcategory
+import bot.services.market as market
+from bot.services.market import (
+    normalize_ticker, ts_to_date, get_ticker_metadata, get_ticker_subcategory,
+    clear_price_cache_for,
+)
 
 
 class TestNormalizeTicker:
@@ -145,3 +149,23 @@ class TestGetTickerSubcategoryShim:
     def test_returns_none_when_unknown(self):
         with patch("bot.services.market.get_ticker_metadata", return_value={"subcategory": None, "sector": None, "industry": None}):
             assert get_ticker_subcategory("FAKE") is None
+
+
+class TestClearPriceCacheFor:
+    @pytest.fixture(autouse=True)
+    def _clean_cache(self):
+        market._price_cache.clear()
+        yield
+        market._price_cache.clear()
+
+    def test_removes_only_given_tickers(self):
+        market._price_cache["AAPL"] = ({"ticker": "AAPL"}, 0.0)
+        market._price_cache["MSFT"] = ({"ticker": "MSFT"}, 0.0)
+        removed = clear_price_cache_for(["AAPL"])
+        assert removed == 1
+        assert "AAPL" not in market._price_cache
+        assert "MSFT" in market._price_cache
+
+    def test_missing_ticker_is_noop(self):
+        removed = clear_price_cache_for(["NOTCACHED"])
+        assert removed == 0

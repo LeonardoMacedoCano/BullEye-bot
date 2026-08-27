@@ -197,12 +197,19 @@ class TestPriceCache:
     def test_get_missing_returns_none(self):
         assert repo.get_price_cache("NOTEXIST") is None
 
-    def test_clear_removes_all(self):
+    def test_clear_for_tickers_removes_only_given_tickers(self):
         repo.set_price_cache("AAPL", 1.0, 0.01)
         repo.set_price_cache("MSFT", 2.0, 0.02)
-        deleted = repo.clear_price_cache_db()
-        assert deleted == 2
+        deleted = repo.clear_price_cache_db_for_tickers(["AAPL"])
+        assert deleted == 1
         assert repo.get_price_cache("AAPL") is None
+        assert repo.get_price_cache("MSFT") is not None
+
+    def test_clear_for_tickers_empty_list_is_noop(self):
+        repo.set_price_cache("AAPL", 1.0, 0.01)
+        deleted = repo.clear_price_cache_db_for_tickers([])
+        assert deleted == 0
+        assert repo.get_price_cache("AAPL") is not None
 
 
 class TestProventos:
@@ -238,12 +245,15 @@ class TestProventos:
         rows = repo.get_proventos_upcoming(["BBDC4.SA"])
         assert rows == []
 
-    def test_clear_proventos(self):
-        ticker_id = repo.upsert_ticker("ITSA4.SA", "br-stocks", None)
-        repo.upsert_provento(ticker_id, "2024-06-01", None, 0.50, "Dividendo", None)
-        deleted = repo.clear_proventos_db()
+    def test_clear_for_tickers_removes_only_given_tickers(self):
+        keep_id = repo.upsert_ticker("ITSA4.SA", "br-stocks", None)
+        other_id = repo.upsert_ticker("BBAS3.SA", "br-stocks", None)
+        repo.upsert_provento(keep_id, "2024-06-01", None, 0.50, "Dividendo", None)
+        repo.upsert_provento(other_id, "2024-06-01", None, 0.30, "Dividendo", None)
+        deleted = repo.clear_proventos_for_tickers(["ITSA4.SA"])
         assert deleted == 1
-        assert repo.get_proventos_for_ticker(ticker_id) == []
+        assert repo.get_proventos_for_ticker(keep_id) == []
+        assert repo.get_proventos_for_ticker(other_id) != []
 
 
 class TestTickerSectorIndustry:

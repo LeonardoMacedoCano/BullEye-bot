@@ -296,9 +296,17 @@ def set_price_cache(ticker: str, dy_rate: float, dy_yield: float) -> None:
         conn.commit()
 
 
-def clear_price_cache_db() -> int:
+def clear_price_cache_db_for_tickers(symbols: list[str]) -> int:
+    if not symbols:
+        return 0
+    upper = [s.upper() for s in symbols]
+    placeholders = ",".join("?" * len(upper))
     with connection() as conn:
-        cursor = conn.execute("DELETE FROM ticker_price_cache")
+        cursor = conn.execute(
+            f"DELETE FROM ticker_price_cache WHERE ticker_id IN "
+            f"(SELECT id FROM tickers WHERE symbol IN ({placeholders}))",
+            upper,
+        )
         conn.commit()
         return cursor.rowcount
 
@@ -332,9 +340,17 @@ def get_proventos_for_ticker(ticker_id: int) -> list[sqlite3.Row]:
         return cursor.fetchall()
 
 
-def clear_proventos_db() -> int:
+def clear_proventos_for_tickers(symbols: list[str]) -> int:
+    if not symbols:
+        return 0
+    upper = [s.upper() for s in symbols]
+    placeholders = ",".join("?" * len(upper))
     with connection() as conn:
-        cursor = conn.execute("DELETE FROM proventos")
+        cursor = conn.execute(
+            f"DELETE FROM proventos WHERE ticker_id IN "
+            f"(SELECT id FROM tickers WHERE symbol IN ({placeholders}))",
+            upper,
+        )
         conn.commit()
         return cursor.rowcount
 
