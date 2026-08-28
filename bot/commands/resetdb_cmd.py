@@ -14,6 +14,8 @@ _TABLES = [
     "proventos",
     "ticker_price_cache",
     "alerts",
+    "fgi_alerts",
+    "user_fgi_ceilings",
     "user_tickers",
     "schedules",
     "tickers",

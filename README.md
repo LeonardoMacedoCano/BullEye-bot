@@ -19,6 +19,7 @@ Each user has their own isolated data — add your own tickers, set your own ale
 | **Daily summaries** | Schedule a full market overview delivered to your DMs every day at a time you choose |
 | **Dividend radar** | Upcoming ex-dates, pay-dates, types (Dividendo, JCP, Rendimento), and amounts for the next 60 days |
 | **Market sentiment** | VIX, IBOVESPA, and Bitcoin Fear & Greed Index shown in every summary |
+| **Fear & Greed ceiling/alert** | Set a personal Fear & Greed Index threshold — see it flagged in `/summary`, or get a one-time DM when it's reached |
 | **Performance movers** | Best and worst performers across your portfolio by day, week, and month |
 | **Buy opportunities** | Tickers currently trading at or below your ceiling, ranked by margin |
 
@@ -37,6 +38,10 @@ All commands are slash commands — type `/` in Discord to see autocomplete sugg
 | `/ceiling <TICKER> <PRICE>` | Set your personal buy-target price |
 | `/ceiling <TICKER> clear` | Remove a ceiling |
 | `/ceiling <TICKER>` | Check ceiling vs current price with margin |
+| `/ceiling_fear_greed <1-100>` | Set your personal Crypto Fear & Greed Index ceiling |
+| `/ceiling_fear_greed clear` | Remove the Fear & Greed ceiling |
+| `/ceiling_fear_greed` | Check the Fear & Greed Index vs your ceiling |
+| `/alert_fear_greed <1-100>` | Get a DM when the Fear & Greed Index reaches or drops below target (fires once) |
 | `/note <TICKER> <TEXT>` | Attach a free-text note to a ticker (max 80 characters) |
 | `/note <TICKER> clear` | Remove a note |
 | `/note <TICKER>` | View the current note |

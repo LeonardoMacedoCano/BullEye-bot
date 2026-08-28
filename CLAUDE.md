@@ -22,9 +22,11 @@ bot/
 │   ├── dividends_cmd.py # dividends — heavy operation, uses semaphore
 │   ├── cache_cmd.py  # refreshcache
 │   ├── help_cmd.py   # help
-│   └── resetdb_cmd.py # resetdb (dev only, requires ENABLE_RESETDB=1)
+│   ├── resetdb_cmd.py # resetdb (dev only, requires ENABLE_RESETDB=1)
+│   ├── ceiling_fear_greed_cmd.py # ceiling_fear_greed (personal Fear & Greed ceiling)
+│   └── alert_fear_greed_cmd.py   # alert_fear_greed (Fear & Greed threshold alert)
 ├── db/
-│   ├── database.py   # SQLite schema init
+│   ├── database.py   # SQLite schema init, connection() context manager
 │   └── repository.py # All DB access functions
 ├── application/       # Use cases — plain structured data (dicts/lists), no Discord objects
 │   ├── summary_use_case.py   # build_summary
@@ -38,6 +40,8 @@ bot/
 │   ├── dividends_embed.py# dividends_field_value, build_dividends_embed
 │   ├── tickers_embed.py  # build_tickers_embed
 │   ├── help_embed.py     # build_help_embed
+│   ├── context.py        # per-request correlation ID (ContextVar), threaded through logs
+│   ├── retry.py          # fetch_with_retry() — HTTP GET with exponential backoff
 │   └── cache_embed.py    # build_cache_embed
 └── services/
     ├── market.py     # yfinance + brapi.dev, in-memory price cache

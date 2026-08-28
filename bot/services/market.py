@@ -55,10 +55,12 @@ def ts_to_date(ts) -> str | None:
         return None
 
 
-def clear_price_cache() -> int:
+def clear_price_cache_for(tickers: list[str]) -> int:
+    count = 0
     with _price_cache_lock:
-        count = len(_price_cache)
-        _price_cache.clear()
+        for t in tickers:
+            if _price_cache.pop(t, None) is not None:
+                count += 1
     return count
 
 
