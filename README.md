@@ -1,10 +1,14 @@
 # BullEyeBot
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+![Self-hosted](https://img.shields.io/badge/deployment-self--hosted-lightgrey)
+
 > Your personal financial market assistant on Discord. Track stocks, crypto, and ETFs — get price alerts, dividend radars, and daily summaries without leaving your server.
 
 Supports Brazilian B3 stocks, US equities, ETFs, and cryptocurrencies. Pulls live data from [yfinance](https://github.com/ranaroussi/yfinance) and [brapi.dev](https://brapi.dev), with a local cache to keep responses fast and API calls low.
 
-Each user has their own isolated data — add your own tickers, set your own alerts, schedule your own summaries.
+**This is a self-hosted bot** — there's no public invite link. You run your own instance (a few minutes with Docker, see below) and it lives on your server only. Each user of that server gets their own isolated tickers, alerts, and schedule.
 
 ---
 
@@ -23,37 +27,7 @@ Each user has their own isolated data — add your own tickers, set your own ale
 | **Performance movers** | Best and worst performers across your portfolio by day, week, and month |
 | **Buy opportunities** | Tickers currently trading at or below your ceiling, ranked by margin |
 
----
-
-## Commands
-
-All commands are slash commands — type `/` in Discord to see autocomplete suggestions.
-
-| Command | What it does |
-|---------|-------------|
-| `/add <TICKER> [wallet\|watchlist]` | Start tracking a ticker (default: watchlist) |
-| `/remove <TICKER>` | Stop tracking a ticker and remove its alerts |
-| `/tickers` | Show all your tickers with ceiling, alerts, and notes |
-| `/alert <TICKER> <PRICE>` | Get a DM when price drops to or below target (fires once) |
-| `/ceiling <TICKER> <PRICE>` | Set your personal buy-target price |
-| `/ceiling <TICKER> clear` | Remove a ceiling |
-| `/ceiling <TICKER>` | Check ceiling vs current price with margin |
-| `/ceiling_fear_greed <1-100>` | Set your personal Crypto Fear & Greed Index ceiling |
-| `/ceiling_fear_greed clear` | Remove the Fear & Greed ceiling |
-| `/ceiling_fear_greed` | Check the Fear & Greed Index vs your ceiling |
-| `/alert_fear_greed <1-100>` | Get a DM when the Fear & Greed Index reaches or drops below target (fires once) |
-| `/note <TICKER> <TEXT>` | Attach a free-text note to a ticker (max 80 characters) |
-| `/note <TICKER> clear` | Remove a note |
-| `/note <TICKER>` | View the current note |
-| `/schedule <HH:MM>` | Schedule a daily summary DM (24h format, uses configured timezone) |
-| `/schedule` | View your current schedule |
-| `/unschedule` | Cancel your daily summary |
-| `/summary` | Get your full portfolio summary right now |
-| `/dividends` | Show upcoming dividends for the next 60 days |
-| `/refreshcache` | Force-refresh all market data (prices, dividends, Fear & Greed) |
-| `/help` | Show all commands |
-
-**Ticker auto-formatting:** `PETR4` → `PETR4.SA` (B3), `BTC` → `BTC-USD` (crypto). US stocks and ETFs like `AAPL` pass through as-is.
+Full list of slash commands → **[docs/COMMANDS.md](docs/COMMANDS.md)**
 
 ---
 
@@ -72,77 +46,27 @@ VALE3   R$56.40    -0.5%  8.21%  R$60.00 +6%
 
 **📈 Market Intelligence** — VIX/IBOV/Fear & Greed indicators, best & worst performers by day/week/month, upcoming dividends, and buy opportunities (tickers at or below your ceiling), each as its own field.
 
-`/dividends`, `/tickers`, `/help`, and `/refreshcache` also render as embeds; other commands (`/alert`, `/ceiling`, `/note`, `/schedule`, etc.) reply with a plain one-line confirmation.
-
 ---
 
-## Setup
-
-### 1. Create a Discord bot
-
-1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) and create a new application.
-2. Under **Bot**, click **Reset Token** and copy it — this is your `DISCORD_TOKEN`.
-3. Enable **Message Content Intent** under Privileged Gateway Intents.
-4. Under **OAuth2 → URL Generator**, select scope `bot` + `applications.commands` with permissions: Read Messages, Send Messages, Read Message History.
-5. Open the generated URL to invite the bot to your server.
-
-### 2. Run with Docker (recommended)
+## Quick start
 
 ```bash
-# Create a .env file with at minimum your bot token
+git clone https://github.com/LeonardoMacedoCano/BullEye-bot.git
+cd BullEye-bot
 echo "DISCORD_TOKEN=your_token_here" > .env
-
 docker compose up -d
-docker compose logs -f
 ```
 
-### 3. Run locally
-
-```bash
-pip install -r requirements.txt
-
-# Create a .env file with at minimum your bot token
-echo "DISCORD_TOKEN=your_token_here" > .env
-
-python -m bot.main
-```
-
-> Slash commands may take up to 1 hour to appear globally after the first start.
-
-### 4. Run the tests
-
-```bash
-pytest
-```
-
-Covers formatting utilities, market normalization, database operations, and the use case layer (summary, dividends, tickers). A dedicated import smoke test verifies every module loads without error, catching broken imports before they reach the container.
+Need a bot token, or want to run it without Docker? Full walkthrough (creating the Discord app, environment variables, running tests) → **[docs/SETUP.md](docs/SETUP.md)**
 
 ---
 
-## Environment variables
+## Built with
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `DISCORD_TOKEN` | Yes | — | Bot token from the Developer Portal |
-| `DATABASE_PATH` | No | `/data/bot.db` | Path to the SQLite file (inside the container) |
-| `TIMEZONE` | No | `UTC` | Timezone for scheduled summaries and log timestamps — e.g. `America/Sao_Paulo` |
-| `ENABLE_RESETDB` | No | — | Set to `1` to enable `/resetdb` (dev/testing only) |
-| `PRICE_CACHE_TTL_MINUTES` | No | `5` | How long to cache price data. Lower = fresher data, more API calls. |
-| `DIV_CACHE_TTL_HOURS` | No | `24` | How long to cache dividend/yield data. |
-| `FEAR_GREED_CACHE_TTL_MINUTES` | No | `30` | How long to cache the Fear & Greed index. |
+discord.py · SQLite · [yfinance](https://github.com/ranaroussi/yfinance) · [brapi.dev](https://brapi.dev)
 
-### Cache behaviour
+Want to see how it's structured under the hood (architecture, layering, coding conventions)? See **[CLAUDE.md](CLAUDE.md)**.
 
-All caches are **on-demand only** — data is fetched when a command needs it and stored until the TTL expires. If the bot is idle, no API calls are made. To force an immediate refresh, use `/refreshcache`.
+## License
 
----
-
-## Ticker conventions
-
-| Input | Normalized | Market |
-|-------|-----------|--------|
-| `PETR4` | `PETR4.SA` | B3 Brazil |
-| `BTC` | `BTC-USD` | Crypto |
-| `AAPL` | `AAPL` | US stocks / ETFs |
-
-Normalization is automatic — you never need to type `.SA` or `-USD` manually.
+[MIT](LICENSE) — do what you want with it, just keep the copyright notice.
