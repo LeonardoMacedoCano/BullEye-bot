@@ -93,14 +93,24 @@ def get_ticker_data(ticker: str) -> dict | None:
             with _cache_stats_lock:
                 _cache_stats["errors"] += 1
             return None
-        close = history["Close"]
+        close = history["Close"][history["Close"] > 0]
+        if close.empty:
+            logger.warning("[%s] No valid close prices for ticker %s", rid, ticker)
+            with _cache_stats_lock:
+                _cache_stats["errors"] += 1
+            return None
         current_price = float(close.iloc[-1])
         high_30d = float(history["High"].max())
         low_series = history["Low"][history["Low"] > 0]
         low_30d = float(low_series.min()) if not low_series.empty else float(history["Low"].min())
         n = len(close)
-        day_change_pct   = float((close.iloc[-1] - close.iloc[-2]) / close.iloc[-2] * 100) if n >= 2 else 0.0
-        week_change_pct  = float((close.iloc[-1] - close.iloc[-6]) / close.iloc[-6] * 100) if n >= 6 else day_change_pct
+
+        today_local = datetime.datetime.now(close.index[-1].tzinfo).date()
+        market_open_today = close.index[-1].date() == today_local
+
+        raw_day_change_pct = float((close.iloc[-1] - close.iloc[-2]) / close.iloc[-2] * 100) if n >= 2 else 0.0
+        day_change_pct   = raw_day_change_pct if market_open_today else 0.0
+        week_change_pct  = float((close.iloc[-1] - close.iloc[-6]) / close.iloc[-6] * 100) if n >= 6 else raw_day_change_pct
         month_change_pct = float((close.iloc[-1] - close.iloc[0])  / close.iloc[0]  * 100) if n >= 2 else 0.0
         data = {
             "ticker": ticker.upper(),
@@ -177,7 +187,7 @@ def fetch_br_proventos(ticker: str) -> list[dict]:
             })
         return proventos
     except Exception as exc:
-        logger.debug("brapi proventos fetch failed for %s: %s", ticker, exc)
+        logger.warning("brapi proventos fetch failed for %s: %s", ticker, exc)
         return []
 
 

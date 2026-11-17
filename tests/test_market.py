@@ -1,10 +1,26 @@
+import datetime
+import logging
+
+import numpy as np
+import pandas as pd
 import pytest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 import bot.services.market as market
 from bot.services.market import (
     normalize_ticker, ts_to_date, get_ticker_metadata, get_ticker_subcategory,
-    clear_price_cache_for,
+    clear_price_cache_for, get_ticker_data, fetch_br_proventos,
 )
+
+_TZ = datetime.timezone(datetime.timedelta(hours=-3))
+
+
+def _history_df(closes: list[float], end: pd.Timestamp) -> pd.DataFrame:
+    idx = pd.date_range(end=end, periods=len(closes), freq="D", tz=_TZ)
+    closes = np.array(closes, dtype=float)
+    return pd.DataFrame(
+        {"Close": closes, "High": closes + 1, "Low": closes - 1},
+        index=idx,
+    )
 
 
 class TestNormalizeTicker:
@@ -169,3 +185,76 @@ class TestClearPriceCacheFor:
     def test_missing_ticker_is_noop(self):
         removed = clear_price_cache_for(["NOTCACHED"])
         assert removed == 0
+
+
+class TestGetTickerDataDayChange:
+    @pytest.fixture(autouse=True)
+    def _clean_cache(self):
+        market._price_cache.clear()
+        yield
+        market._price_cache.clear()
+
+    def _mock_history(self, df: pd.DataFrame):
+        mock_ticker = MagicMock()
+        mock_ticker.history.return_value = df
+        return patch("yfinance.Ticker", return_value=mock_ticker)
+
+    def test_day_change_zero_when_market_closed_today(self):
+        """Last bar is Friday, 'today' (in the mock) is two days later — market hasn't traded since."""
+        now = pd.Timestamp.now(tz=_TZ)
+        df = _history_df([100, 101, 102, 103, 104], end=now.normalize() - pd.Timedelta(days=2))
+        with self._mock_history(df):
+            data = get_ticker_data("CLOSEDTEST")
+        assert data["day_change_pct"] == 0.0
+
+    def test_day_change_computed_when_market_open_today(self):
+        now = pd.Timestamp.now(tz=_TZ)
+        df = _history_df([100, 101, 102, 103, 104], end=now.normalize())
+        with self._mock_history(df):
+            data = get_ticker_data("OPENTEST")
+        expected = (104 - 103) / 103 * 100
+        assert data["day_change_pct"] == pytest.approx(expected)
+
+    def test_week_change_fallback_unaffected_by_closed_market(self):
+        """day_change_pct is zeroed on a closed-market day, but week_change_pct's
+        fallback (used when there's under 6 sessions of history) must still reflect
+        the real last session-over-session move, not the zeroed display value."""
+        now = pd.Timestamp.now(tz=_TZ)
+        df = _history_df([100, 101, 102], end=now.normalize() - pd.Timedelta(days=2))
+        with self._mock_history(df):
+            data = get_ticker_data("THINWEEKENDTEST")
+        assert data["day_change_pct"] == 0.0
+        expected = (102 - 101) / 101 * 100
+        assert data["week_change_pct"] == pytest.approx(expected)
+
+    def test_zero_and_nan_close_rows_are_filtered(self):
+        now = pd.Timestamp.now(tz=_TZ)
+        idx = pd.date_range(end=now.normalize(), periods=4, freq="D", tz=_TZ)
+        df = pd.DataFrame(
+            {"Close": [10.0, 0.0, np.nan, 20.0], "High": [11, 1, 1, 21], "Low": [9, 0, 0, 19]},
+            index=idx,
+        )
+        with self._mock_history(df):
+            data = get_ticker_data("ZEROTEST")
+        assert data["current_price"] == 20.0
+        assert data["day_change_pct"] == pytest.approx((20 - 10) / 10 * 100)
+
+    def test_all_invalid_close_rows_returns_none(self):
+        now = pd.Timestamp.now(tz=_TZ)
+        idx = pd.date_range(end=now.normalize(), periods=3, freq="D", tz=_TZ)
+        df = pd.DataFrame(
+            {"Close": [0.0, np.nan, 0.0], "High": [1, 1, 1], "Low": [0, 0, 0]},
+            index=idx,
+        )
+        with self._mock_history(df):
+            data = get_ticker_data("ALLINVALID")
+        assert data is None
+
+
+class TestFetchBrProventosLogging:
+    def test_fetch_failure_logs_at_warning(self, caplog):
+        with patch("bot.services.market.fetch_with_retry", side_effect=Exception("boom")):
+            with caplog.at_level(logging.WARNING, logger="bot.services.market"):
+                result = fetch_br_proventos("PETR4.SA")
+        assert result == []
+        assert any(record.levelno == logging.WARNING for record in caplog.records)
