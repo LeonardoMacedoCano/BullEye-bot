@@ -36,8 +36,6 @@ def _patched(rows, ticker_data_map=None, fg=None, fgi_ceiling=None):
         "bot.application.summary_use_case",
         list_tickers=MagicMock(return_value=rows),
         get_ticker_data=MagicMock(side_effect=fake_get_ticker_data),
-        get_ticker_subcategory=MagicMock(return_value="stocks"),
-        update_ticker_subcategory=MagicMock(),
         get_fear_greed_index=MagicMock(return_value=fg),
         get_user_fgi_ceiling=MagicMock(return_value=fgi_ceiling),
         get_vix=MagicMock(return_value=None),

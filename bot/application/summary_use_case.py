@@ -1,12 +1,10 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from bot.db.repository import list_tickers, update_ticker_subcategory, get_user_fgi_ceiling
-from bot.services.market import (
-    classify_br_subcategory, get_ticker_data, get_ticker_subcategory,
-    SUBCATEGORY_ORDER, SUBCATEGORY_LABELS,
-)
+from bot.db.repository import list_tickers, get_user_fgi_ceiling
+from bot.services.market import get_ticker_data, SUBCATEGORY_ORDER, SUBCATEGORY_LABELS
 from bot.application.market_cache import get_br_stock_metrics
+from bot.application.ticker_use_case import backfill_subcategories
 from bot.services.fear_greed import get_fear_greed_index
 from bot.services.sentiment import get_vix, get_ibov
 from bot.shared.formatting import display_name, currency, fmt, ansi_pct, render_table, group_by_subcategory
@@ -175,21 +173,6 @@ def _compute_avg_day_change(rows: list) -> float | None:
     return sum(changes) / len(changes) if changes else None
 
 
-def _backfill_subcategories(user_id: int, tickers: list) -> list:
-    result = []
-    for row in tickers:
-        ticker = row["ticker"]
-        sub = row["subcategory"]
-        if sub is None:
-            sub = get_ticker_subcategory(ticker)
-            update_ticker_subcategory(user_id, ticker, sub)
-        elif sub == "br-stocks" and classify_br_subcategory(ticker) == "br-fiis":
-            sub = "br-fiis"
-            update_ticker_subcategory(user_id, ticker, sub)
-        result.append({**dict(row), "subcategory": sub})
-    return result
-
-
 def _prefetch_tickers(tickers: list) -> None:
     unique = list({row["ticker"] for row in tickers})
     if not unique:
@@ -209,7 +192,7 @@ def build_summary(user_id: int, discord_mention: str) -> dict:
     if not tickers:
         return {"empty": True, "mention": discord_mention}
 
-    tickers = _backfill_subcategories(user_id, tickers)
+    tickers = backfill_subcategories(user_id, tickers)
     _prefetch_tickers(tickers)
     wallet = [row for row in tickers if row["category"] == "wallet"]
     watchlist = [row for row in tickers if row["category"] == "watchlist"]

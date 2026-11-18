@@ -1,5 +1,21 @@
-from bot.services.market import SUBCATEGORY_LABELS, SUBCATEGORY_ORDER
+from bot.db.repository import update_ticker_subcategory
+from bot.services.market import classify_br_subcategory, get_ticker_subcategory, SUBCATEGORY_LABELS, SUBCATEGORY_ORDER
 from bot.shared.formatting import display_name, currency, render_table, group_by_subcategory
+
+
+def backfill_subcategories(user_id: int, tickers: list) -> list:
+    result = []
+    for row in tickers:
+        ticker = row["ticker"]
+        sub = row["subcategory"]
+        if sub is None:
+            sub = get_ticker_subcategory(ticker)
+            update_ticker_subcategory(user_id, ticker, sub)
+        elif sub == "br-stocks" and classify_br_subcategory(ticker) == "br-fiis":
+            sub = "br-fiis"
+            update_ticker_subcategory(user_id, ticker, sub)
+        result.append({**dict(row), "subcategory": sub})
+    return result
 
 
 def _fmt_price(price: float | None, ticker: str) -> str:
