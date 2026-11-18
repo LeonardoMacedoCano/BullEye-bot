@@ -24,22 +24,29 @@ def get_cache_stats() -> dict:
         return dict(_cache_stats)
 
 _B3_PATTERN = re.compile(r'^[A-Z]{4,5}(3|4|11)$')
+_B3_FII_PATTERN = re.compile(r'^[A-Z]{4}11$')
 _ALIASES = {"BTC": "BTC-USD"}
 
-SUBCATEGORY_ORDER = ["br-stocks", "crypto", "etf", "stocks"]
+SUBCATEGORY_ORDER = ["br-stocks", "br-fiis", "crypto", "etf", "stocks"]
 SUBCATEGORY_LABELS = {
     "br-stocks": "BR Stocks",
+    "br-fiis": "BR FIIs",
     "crypto": "Crypto",
     "etf": "ETF",
     "stocks": "Stocks",
 }
 
 _BR_TYPE_MAP = {
-    "DIVIDENDO": "Dividendo",
-    "JCP": "JSCP",
-    "RENDIMENTO": "Rendimento",
-    "SUBSCRICAO": "Subscrição",
+    "DIVIDENDO": "Dividend",
+    "JCP": "JCP",
+    "RENDIMENTO": "Income",
+    "SUBSCRICAO": "Subscription",
 }
+
+
+def classify_br_subcategory(ticker: str) -> str:
+    symbol = ticker.upper().removesuffix(".SA")
+    return "br-fiis" if _B3_FII_PATTERN.match(symbol) else "br-stocks"
 
 from bot.config import PRICE_CACHE_TTL as _PRICE_CACHE_TTL
 
@@ -183,9 +190,9 @@ def fetch_br_proventos(ticker: str) -> list[dict]:
                 continue
             pay_date = (div.get("paymentDate") or "")[:10] or None
             amount = float(div.get("rate") or 0.0) or None
-            raw_type = (div.get("paymentType") or "").upper()
-            ptype = _BR_TYPE_MAP.get(raw_type, raw_type or "Dividendo")
-            description = div.get("label") or None
+            raw_type = (div.get("label") or "").upper()
+            ptype = _BR_TYPE_MAP.get(raw_type, raw_type or "Dividend")
+            description = div.get("remarks") or None
             proventos.append({
                 "ex_date": ex_date,
                 "pay_date": pay_date,
@@ -215,7 +222,7 @@ def get_ticker_subcategory(ticker: str) -> str | None:
 def get_ticker_metadata(ticker: str) -> dict:
     base: dict = {"subcategory": None, "sector": None, "industry": None}
     if ticker.upper().endswith(".SA"):
-        base["subcategory"] = "br-stocks"
+        base["subcategory"] = classify_br_subcategory(ticker)
     try:
         t = yf.Ticker(ticker)
         info = call_with_retry(lambda: t.info)

@@ -2,7 +2,10 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from bot.db.repository import list_tickers, update_ticker_subcategory, get_user_fgi_ceiling
-from bot.services.market import get_ticker_data, get_ticker_subcategory, SUBCATEGORY_ORDER, SUBCATEGORY_LABELS
+from bot.services.market import (
+    classify_br_subcategory, get_ticker_data, get_ticker_subcategory,
+    SUBCATEGORY_ORDER, SUBCATEGORY_LABELS,
+)
 from bot.application.market_cache import get_br_stock_metrics
 from bot.application.dividends_use_case import get_dividends_rows
 from bot.services.fear_greed import get_fear_greed_index
@@ -71,7 +74,7 @@ def _get_section_groups(rows: list) -> list[dict]:
     result = []
     for key, group_rows in groups:
         label = SUBCATEGORY_LABELS.get(key, key) if key else None
-        show_br = key == "br-stocks"
+        show_br = key in ("br-stocks", "br-fiis")
         headers, data_rows = _collect_rows(group_rows, show_br)
         table_str = render_table(headers, data_rows)
         if table_str:
@@ -176,12 +179,15 @@ def _compute_avg_day_change(rows: list) -> float | None:
 def _backfill_subcategories(user_id: int, tickers: list) -> list:
     result = []
     for row in tickers:
-        if row["subcategory"] is None:
-            sub = get_ticker_subcategory(row["ticker"])
-            update_ticker_subcategory(user_id, row["ticker"], sub)
-            result.append({**dict(row), "subcategory": sub})
-        else:
-            result.append(row)
+        ticker = row["ticker"]
+        sub = row["subcategory"]
+        if sub is None:
+            sub = get_ticker_subcategory(ticker)
+            update_ticker_subcategory(user_id, ticker, sub)
+        elif sub == "br-stocks" and classify_br_subcategory(ticker) == "br-fiis":
+            sub = "br-fiis"
+            update_ticker_subcategory(user_id, ticker, sub)
+        result.append({**dict(row), "subcategory": sub})
     return result
 
 
