@@ -6,6 +6,7 @@ import threading
 import time
 from collections import OrderedDict
 
+import requests
 import yfinance as yf
 
 from bot import config
@@ -191,6 +192,15 @@ def fetch_br_proventos(ticker: str) -> list[dict]:
                 "description": description,
             })
         return proventos
+    except requests.exceptions.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 401:
+            logger.warning(
+                "BRAPI_TOKEN rejected by brapi.dev (401) for %s — check if it's valid or expired",
+                symbol,
+            )
+        else:
+            logger.warning("brapi proventos fetch failed for %s: %s", ticker, exc)
+        return []
     except Exception as exc:
         logger.warning("brapi proventos fetch failed for %s: %s", ticker, exc)
         return []
