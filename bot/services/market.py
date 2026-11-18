@@ -11,7 +11,7 @@ import yfinance as yf
 
 from bot import config
 from bot.shared.context import get_request_id
-from bot.shared.retry import fetch_with_retry
+from bot.shared.retry import call_with_retry, fetch_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ def get_ticker_data(ticker: str) -> dict | None:
         _cache_stats["misses"] += 1
     try:
         t = yf.Ticker(ticker)
-        history = t.history(period="1mo")
+        history = call_with_retry(t.history, period="1mo")
         if history.empty:
             logger.warning("[%s] No data returned for ticker %s (empty history)", rid, ticker)
             with _cache_stats_lock:
@@ -139,7 +139,8 @@ def get_ticker_data(ticker: str) -> dict | None:
 
 def validate_ticker(ticker: str) -> bool:
     try:
-        price = yf.Ticker(ticker).fast_info.last_price
+        t = yf.Ticker(ticker)
+        price = call_with_retry(lambda: t.fast_info.last_price)
         return price is not None and not math.isnan(float(price)) and float(price) > 0
     except Exception:
         return False
@@ -148,7 +149,8 @@ def validate_ticker(ticker: str) -> bool:
 def dividends_trailing_12m(ticker: str) -> float:
     try:
         import pandas as pd
-        divs = yf.Ticker(ticker).dividends
+        t = yf.Ticker(ticker)
+        divs = call_with_retry(lambda: t.dividends)
         if divs.empty:
             return 0.0
         cutoff = pd.Timestamp.now(tz=divs.index.tz) - pd.Timedelta(days=365)
@@ -215,7 +217,8 @@ def get_ticker_metadata(ticker: str) -> dict:
     if ticker.upper().endswith(".SA"):
         base["subcategory"] = "br-stocks"
     try:
-        info = yf.Ticker(ticker).info
+        t = yf.Ticker(ticker)
+        info = call_with_retry(lambda: t.info)
         qt = info.get("quoteType", "").upper()
         if base["subcategory"] is None:
             if qt == "CRYPTOCURRENCY":
