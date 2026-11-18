@@ -45,9 +45,6 @@ _BR_TYPE_MAP = {
 
 
 def classify_br_subcategory(ticker: str) -> str:
-    # Ticker-suffix heuristic: B3 FIIs conventionally use the "11" suffix, same as
-    # BR-listed ETFs/units (e.g. BOVA11) — yfinance reports both as quoteType EQUITY
-    # for .SA tickers, so there's no reliable signal to tell them apart.
     symbol = ticker.upper().removesuffix(".SA")
     return "br-fiis" if _B3_FII_PATTERN.match(symbol) else "br-stocks"
 
