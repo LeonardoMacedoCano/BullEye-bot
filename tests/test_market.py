@@ -144,7 +144,7 @@ class TestGetTickerMetadata:
         assert result["industry"] is None
 
     def test_yfinance_exception_returns_safe_defaults(self):
-        with patch("yfinance.Ticker") as mock_yf:
+        with patch("yfinance.Ticker") as mock_yf, patch("bot.shared.retry.time.sleep"):
             type(mock_yf.return_value).info = property(lambda self: (_ for _ in ()).throw(Exception("network")))
             result = get_ticker_metadata("AAPL")
         assert result["subcategory"] is None
