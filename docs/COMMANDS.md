@@ -24,11 +24,10 @@ All commands are slash commands — type `/` in Discord to see autocomplete sugg
 | `/schedule` | View your current schedule |
 | `/unschedule` | Cancel your daily summary |
 | `/summary` | Get your full portfolio summary right now |
-| `/dividends` | Show upcoming dividends for the next 60 days |
-| `/refreshcache` | Force-refresh your own market data (prices, dividends, Fear & Greed) |
+| `/refreshcache` | Force-refresh your own market data (prices, Fear & Greed) |
 | `/help` | Show all commands |
 
-`/dividends`, `/tickers`, `/help`, and `/refreshcache` render as embeds; other commands (`/alert`, `/ceiling`, `/note`, `/schedule`, etc.) reply with a plain one-line confirmation.
+`/tickers`, `/help`, and `/refreshcache` render as embeds; other commands (`/alert`, `/ceiling`, `/note`, `/schedule`, etc.) reply with a plain one-line confirmation.
 
 ---
 

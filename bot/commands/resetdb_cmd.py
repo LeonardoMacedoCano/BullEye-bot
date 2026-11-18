@@ -11,7 +11,6 @@ from bot.utils import defer, followup, mention
 logger = logging.getLogger(__name__)
 
 _TABLES = [
-    "proventos",
     "ticker_price_cache",
     "alerts",
     "fgi_alerts",

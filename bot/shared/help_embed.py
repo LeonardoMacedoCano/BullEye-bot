@@ -27,13 +27,12 @@ _SECTIONS = [
     ]),
     ("📊 Summary & Schedule", [
         "`/summary` — Get your current portfolio summary",
-        "`/dividends` — Show upcoming dividends (next 60 days) with type, ex-date, pay-date and amount",
         "`/schedule <HH:MM>` — Schedule a daily summary DM",
         "`/schedule` — Show your current schedule",
         "`/unschedule` — Cancel your daily summary",
     ]),
     ("⚙️ Admin", [
-        "`/refreshcache` — Clear and re-fetch all data caches (prices, dividends, Fear & Greed)",
+        "`/refreshcache` — Clear and re-fetch all data caches (prices, Fear & Greed)",
         "`/help` — Show this message",
     ]),
 ]

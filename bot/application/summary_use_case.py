@@ -7,7 +7,6 @@ from bot.services.market import (
     SUBCATEGORY_ORDER, SUBCATEGORY_LABELS,
 )
 from bot.application.market_cache import get_br_stock_metrics
-from bot.application.dividends_use_case import get_dividends_rows
 from bot.services.fear_greed import get_fear_greed_index
 from bot.services.sentiment import get_vix, get_ibov
 from bot.shared.formatting import display_name, currency, fmt, ansi_pct, render_table, group_by_subcategory
@@ -227,6 +226,5 @@ def build_summary(user_id: int, discord_mention: str) -> dict:
         "avg_day_change": _compute_avg_day_change(wallet),
         "market": _get_market_data(has_btc, fg, fgi_ceiling),
         "performance": _get_performance_data(wallet, watchlist),
-        "dividends": get_dividends_rows(tickers),
         "opportunities": _get_opportunities_data(tickers, fg, fgi_ceiling),
     }

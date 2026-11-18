@@ -311,50 +311,6 @@ def clear_price_cache_db_for_tickers(symbols: list[str]) -> int:
         return cursor.rowcount
 
 
-def upsert_provento(
-    ticker_id: int,
-    ex_date: str,
-    pay_date: str | None,
-    amount: float | None,
-    ptype: str | None,
-    description: str | None,
-) -> None:
-    with connection() as conn:
-        conn.execute(
-            "INSERT INTO proventos (ticker_id, ex_date, pay_date, amount, type, description, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(ticker_id, ex_date, type) DO UPDATE SET "
-            "pay_date = excluded.pay_date, amount = excluded.amount, "
-            "description = excluded.description, updated_at = excluded.updated_at",
-            (ticker_id, ex_date, pay_date, amount, ptype, description, int(time.time())),
-        )
-        conn.commit()
-
-
-def get_proventos_for_ticker(ticker_id: int) -> list[sqlite3.Row]:
-    with connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM proventos WHERE ticker_id = ? ORDER BY ex_date DESC LIMIT 10",
-            (ticker_id,),
-        )
-        return cursor.fetchall()
-
-
-def clear_proventos_for_tickers(symbols: list[str]) -> int:
-    if not symbols:
-        return 0
-    upper = [s.upper() for s in symbols]
-    placeholders = ",".join("?" * len(upper))
-    with connection() as conn:
-        cursor = conn.execute(
-            f"DELETE FROM proventos WHERE ticker_id IN "
-            f"(SELECT id FROM tickers WHERE symbol IN ({placeholders}))",
-            upper,
-        )
-        conn.commit()
-        return cursor.rowcount
-
-
 def set_user_fgi_ceiling(user_id: int, value: int) -> None:
     with connection() as conn:
         conn.execute(
@@ -400,24 +356,3 @@ def deactivate_fgi_alert(alert_id: int) -> None:
     with connection() as conn:
         conn.execute("UPDATE fgi_alerts SET active = 0 WHERE id = ?", (alert_id,))
         conn.commit()
-
-
-def get_proventos_upcoming(symbols: list[str], days: int = 60) -> list[sqlite3.Row]:
-    from datetime import date, timedelta
-    today = date.today().isoformat()
-    limit = (date.today() + timedelta(days=days)).isoformat()
-    upper = [s.upper() for s in symbols]
-    if not upper:
-        return []
-    placeholders = ",".join("?" * len(upper))
-    with connection() as conn:
-        cursor = conn.execute(
-            f"SELECT t.symbol, p.ex_date, p.pay_date, p.amount, p.type "
-            f"FROM proventos p JOIN tickers t ON p.ticker_id = t.id "
-            f"WHERE t.symbol IN ({placeholders}) "
-            f"AND p.ex_date IS NOT NULL "
-            f"AND p.ex_date >= ? AND p.ex_date <= ? "
-            f"ORDER BY p.ex_date, t.symbol",
-            (*upper, today, limit),
-        )
-        return cursor.fetchall()

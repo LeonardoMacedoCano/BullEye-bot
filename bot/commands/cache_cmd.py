@@ -7,10 +7,10 @@ from discord.ext import commands
 
 from bot.db.repository import (
     get_or_create_user, list_tickers, update_ticker_sector_industry,
-    clear_price_cache_db_for_tickers, clear_proventos_for_tickers,
+    clear_price_cache_db_for_tickers,
 )
 from bot.services.market import clear_price_cache_for, get_ticker_data, get_ticker_metadata
-from bot.application.market_cache import get_br_stock_metrics, get_dividend_info
+from bot.application.market_cache import get_br_stock_metrics
 from bot.services.fear_greed import clear_fear_greed_cache, get_fear_greed_index
 from bot.utils import defer, followup, mention, perf_start, perf_log
 from bot.shared.cache_embed import build_cache_embed
@@ -26,7 +26,6 @@ def _refresh_all(user_id: int) -> dict:
     # untouched so their next command doesn't pay for a refetch they didn't ask for.
     clear_price_cache_for(symbols)
     clear_price_cache_db_for_tickers(symbols)
-    clear_proventos_for_tickers(symbols)
     clear_fear_greed_cache()
 
     refreshed = 0
@@ -41,8 +40,6 @@ def _refresh_all(user_id: int) -> dict:
                 continue
             if ticker.upper().endswith(".SA"):
                 get_br_stock_metrics(ticker, data["current_price"])
-            else:
-                get_dividend_info(ticker)
             if row["sector"] is None and row["industry"] is None:
                 meta = get_ticker_metadata(ticker)
                 if meta["sector"] or meta["industry"]:
@@ -60,7 +57,7 @@ class CacheCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @app_commands.command(name="refreshcache", description="Clear and re-fetch all data caches (prices, dividends, Fear & Greed)")
+    @app_commands.command(name="refreshcache", description="Clear and re-fetch all data caches (prices, Fear & Greed)")
     async def refreshcache(self, interaction: discord.Interaction) -> None:
         t0 = perf_start()
         if not await defer(interaction):

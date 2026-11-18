@@ -212,50 +212,6 @@ class TestPriceCache:
         assert repo.get_price_cache("AAPL") is not None
 
 
-class TestProventos:
-    def test_upsert_and_get(self):
-        ticker_id = repo.upsert_ticker("PETR4.SA", "br-stocks", None)
-        repo.upsert_provento(ticker_id, "2024-01-15", "2024-02-01", 1.50, "Dividendo", None)
-        rows = repo.get_proventos_for_ticker(ticker_id)
-        assert len(rows) == 1
-        assert rows[0]["ex_date"] == "2024-01-15"
-        assert rows[0]["amount"] == pytest.approx(1.50)
-
-    def test_upsert_is_idempotent_on_conflict(self):
-        ticker_id = repo.upsert_ticker("VALE3.SA", "br-stocks", None)
-        repo.upsert_provento(ticker_id, "2024-03-01", None, 2.0, "Dividendo", None)
-        repo.upsert_provento(ticker_id, "2024-03-01", "2024-04-01", 2.5, "Dividendo", "Updated")
-        rows = repo.get_proventos_for_ticker(ticker_id)
-        assert len(rows) == 1
-        assert rows[0]["amount"] == pytest.approx(2.5)
-        assert rows[0]["pay_date"] == "2024-04-01"
-
-    def test_upcoming_proventos_in_window(self):
-        from datetime import date, timedelta
-        ticker_id = repo.upsert_ticker("ITUB4.SA", "br-stocks", None)
-        future = (date.today() + timedelta(days=10)).isoformat()
-        repo.upsert_provento(ticker_id, future, None, 0.75, "Dividendo", None)
-        rows = repo.get_proventos_upcoming(["ITUB4.SA"])
-        assert len(rows) == 1
-        assert rows[0]["symbol"] == "ITUB4.SA"
-
-    def test_upcoming_excludes_past(self):
-        ticker_id = repo.upsert_ticker("BBDC4.SA", "br-stocks", None)
-        repo.upsert_provento(ticker_id, "2020-01-01", None, 1.0, "Dividendo", None)
-        rows = repo.get_proventos_upcoming(["BBDC4.SA"])
-        assert rows == []
-
-    def test_clear_for_tickers_removes_only_given_tickers(self):
-        keep_id = repo.upsert_ticker("ITSA4.SA", "br-stocks", None)
-        other_id = repo.upsert_ticker("BBAS3.SA", "br-stocks", None)
-        repo.upsert_provento(keep_id, "2024-06-01", None, 0.50, "Dividendo", None)
-        repo.upsert_provento(other_id, "2024-06-01", None, 0.30, "Dividendo", None)
-        deleted = repo.clear_proventos_for_tickers(["ITSA4.SA"])
-        assert deleted == 1
-        assert repo.get_proventos_for_ticker(keep_id) == []
-        assert repo.get_proventos_for_ticker(other_id) != []
-
-
 class TestTickerSectorIndustry:
     def test_add_ticker_stores_sector_and_industry(self):
         user = repo.get_or_create_user("50")

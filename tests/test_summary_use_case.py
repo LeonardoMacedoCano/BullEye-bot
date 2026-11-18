@@ -26,7 +26,7 @@ def _mock_ticker_data(ticker, price=100.0):
     }
 
 
-def _patched(rows, ticker_data_map=None, fg=None, fgi_ceiling=None, dividends=None):
+def _patched(rows, ticker_data_map=None, fg=None, fgi_ceiling=None):
     def fake_get_ticker_data(ticker):
         if ticker_data_map is not None:
             return ticker_data_map.get(ticker)
@@ -42,7 +42,6 @@ def _patched(rows, ticker_data_map=None, fg=None, fgi_ceiling=None, dividends=No
         get_user_fgi_ceiling=MagicMock(return_value=fgi_ceiling),
         get_vix=MagicMock(return_value=None),
         get_ibov=MagicMock(return_value=None),
-        get_dividends_rows=MagicMock(return_value=dividends or []),
     )
 
 
@@ -62,7 +61,7 @@ class TestBuildSummaryWithTickers:
         assert result["mention"] == "@user"
         assert set(result) == {
             "empty", "mention", "wallet_groups", "watchlist_groups",
-            "avg_day_change", "market", "performance", "dividends", "opportunities",
+            "avg_day_change", "market", "performance", "opportunities",
         }
 
     def test_wallet_ticker_appears_in_wallet_groups(self):
@@ -133,12 +132,3 @@ class TestBuildSummaryWithTickers:
         ):
             result = build_summary(1, "@user")
         assert result["opportunities"]["fgi_triggered"] is False
-
-    def test_dividends_rows_passed_through(self):
-        rows = [_make_ticker_row("AAPL", "wallet", "stocks")]
-        fake_dividends = [
-            {"name": "AAPL", "ex_date": "01/01", "pay_date": "02/01", "type": "Dividend", "amount": "$1.00"}
-        ]
-        with _patched(rows, dividends=fake_dividends):
-            result = build_summary(1, "@user")
-        assert result["dividends"] == fake_dividends

@@ -82,18 +82,6 @@ def init_db() -> None:
                 updated_at INTEGER NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS proventos (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticker_id   INTEGER NOT NULL REFERENCES tickers(id),
-                ex_date     TEXT    NOT NULL,
-                pay_date    TEXT    DEFAULT NULL,
-                amount      REAL    DEFAULT NULL,
-                type        TEXT    DEFAULT NULL,
-                description TEXT    DEFAULT NULL,
-                updated_at  INTEGER NOT NULL,
-                UNIQUE(ticker_id, ex_date, type)
-            );
-
             CREATE TABLE IF NOT EXISTS user_fgi_ceilings (
                 user_id       INTEGER PRIMARY KEY REFERENCES users(id),
                 ceiling_value INTEGER NOT NULL
