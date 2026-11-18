@@ -5,6 +5,7 @@ services:
       context: ${BULLEYEBOT_SOURCE_PATH:-.}
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - BRAPI_TOKEN=${BRAPI_TOKEN}
       - DATABASE_PATH=${DATABASE_PATH:-/data/bot.db}
       - TIMEZONE=${TIMEZONE:-UTC}
       - ENABLE_RESETDB=${ENABLE_RESETDB:-}
