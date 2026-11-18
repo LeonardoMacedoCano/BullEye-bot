@@ -1,6 +1,7 @@
 import datetime
 import logging
 import math
+import os
 import re
 import threading
 import time
@@ -12,6 +13,8 @@ from bot.shared.context import get_request_id
 from bot.shared.retry import call_with_retry
 
 logger = logging.getLogger(__name__)
+
+os.makedirs(os.path.join(os.path.expanduser("~"), ".cache", "py-yfinance"), exist_ok=True)
 
 _cache_stats = {"hits": 0, "misses": 0, "errors": 0}
 _cache_stats_lock = threading.Lock()
