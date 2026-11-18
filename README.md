@@ -53,7 +53,7 @@ VALE3   R$56.40    -0.5%  8.21%  R$60.00 +6%
 ```bash
 git clone https://github.com/LeonardoMacedoCano/BullEye-bot.git
 cd BullEye-bot
-echo "DISCORD_TOKEN=your_token_here" > .env
+cp .env.example .env  # fill in DISCORD_TOKEN and BRAPI_TOKEN
 docker compose up -d
 ```
 

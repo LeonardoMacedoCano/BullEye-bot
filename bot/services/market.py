@@ -6,8 +6,10 @@ import threading
 import time
 from collections import OrderedDict
 
+import requests
 import yfinance as yf
 
+from bot import config
 from bot.shared.context import get_request_id
 from bot.shared.retry import fetch_with_retry
 
@@ -159,10 +161,14 @@ def dividends_trailing_12m(ticker: str) -> float:
 def fetch_br_proventos(ticker: str) -> list[dict]:
     """Fetches proventos from brapi.dev. Returns list of dicts; caller handles DB writes."""
     symbol = ticker.upper().replace(".SA", "")
+    if not config.BRAPI_TOKEN:
+        logger.warning("Skipping brapi proventos fetch for %s: BRAPI_TOKEN not set", symbol)
+        return []
     try:
         resp = fetch_with_retry(
             f"https://brapi.dev/api/quote/{symbol}",
             params={"modules": "dividendsData"},
+            headers={"Authorization": f"Bearer {config.BRAPI_TOKEN}"},
             timeout=10,
         )
         results = resp.json().get("results", [])
@@ -186,6 +192,15 @@ def fetch_br_proventos(ticker: str) -> list[dict]:
                 "description": description,
             })
         return proventos
+    except requests.exceptions.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 401:
+            logger.warning(
+                "BRAPI_TOKEN rejected by brapi.dev (401) for %s — check if it's valid or expired",
+                symbol,
+            )
+        else:
+            logger.warning("brapi proventos fetch failed for %s: %s", ticker, exc)
+        return []
     except Exception as exc:
         logger.warning("brapi proventos fetch failed for %s: %s", ticker, exc)
         return []

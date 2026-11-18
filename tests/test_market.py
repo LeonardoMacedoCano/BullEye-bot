@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import pandas as pd
 import pytest
+import requests
 from unittest.mock import MagicMock, patch
 import bot.services.market as market
 from bot.services.market import (
@@ -252,9 +253,42 @@ class TestGetTickerDataDayChange:
 
 
 class TestFetchBrProventosLogging:
+    def test_skips_fetch_when_token_not_set(self, caplog):
+        with patch("bot.config.BRAPI_TOKEN", None):
+            with patch("bot.services.market.fetch_with_retry") as mock_fetch:
+                with caplog.at_level(logging.WARNING, logger="bot.services.market"):
+                    result = fetch_br_proventos("PETR4.SA")
+        assert result == []
+        mock_fetch.assert_not_called()
+        assert any("BRAPI_TOKEN not set" in record.message for record in caplog.records)
+
     def test_fetch_failure_logs_at_warning(self, caplog):
-        with patch("bot.services.market.fetch_with_retry", side_effect=Exception("boom")):
-            with caplog.at_level(logging.WARNING, logger="bot.services.market"):
-                result = fetch_br_proventos("PETR4.SA")
+        with patch("bot.config.BRAPI_TOKEN", "dummy-token"):
+            with patch("bot.services.market.fetch_with_retry", side_effect=Exception("boom")):
+                with caplog.at_level(logging.WARNING, logger="bot.services.market"):
+                    result = fetch_br_proventos("PETR4.SA")
         assert result == []
         assert any(record.levelno == logging.WARNING for record in caplog.records)
+
+    def test_401_logs_token_rejected_message(self, caplog):
+        response = MagicMock(status_code=401)
+        error = requests.exceptions.HTTPError(response=response)
+        with patch("bot.config.BRAPI_TOKEN", "dummy-token"):
+            with patch("bot.services.market.fetch_with_retry", side_effect=error):
+                with caplog.at_level(logging.WARNING, logger="bot.services.market"):
+                    result = fetch_br_proventos("PETR4.SA")
+        assert result == []
+        assert any("rejected by brapi.dev (401)" in record.message for record in caplog.records)
+
+    def test_non_401_http_error_logs_generic_message(self, caplog):
+        response = MagicMock(status_code=400)
+        error = requests.exceptions.HTTPError(response=response)
+        with patch("bot.config.BRAPI_TOKEN", "dummy-token"):
+            with patch("bot.services.market.fetch_with_retry", side_effect=error):
+                with caplog.at_level(logging.WARNING, logger="bot.services.market"):
+                    result = fetch_br_proventos("PETR4.SA")
+        assert result == []
+        assert any(
+            "rejected by brapi.dev" not in record.message and record.levelno == logging.WARNING
+            for record in caplog.records
+        )

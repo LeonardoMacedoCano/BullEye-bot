@@ -132,6 +132,7 @@ All caches are on-demand only — no proactive background fetching. To force a r
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DISCORD_TOKEN` | — | Required. Bot token from Discord Developer Portal. |
+| `BRAPI_TOKEN` | — | Required for dividend/proventos data. API token from [brapi.dev](https://brapi.dev/dashboard). |
 | `DATABASE_PATH` | `/data/bot.db` | Path to SQLite file. |
 | `TIMEZONE` | `UTC` | Timezone for scheduled summaries and log timestamps (e.g. `America/Sao_Paulo`). |
 | `ENABLE_RESETDB` | `` | Set to `1` to enable the `!resetdb` dev command. |
@@ -143,7 +144,7 @@ All caches are on-demand only — no proactive background fetching. To force a r
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env  # fill in DISCORD_TOKEN
+cp .env.example .env  # fill in DISCORD_TOKEN and BRAPI_TOKEN
 python -m bot.main
 ```
 

@@ -13,6 +13,7 @@ def fetch_with_retry(
     url: str,
     *,
     params: dict | None = None,
+    headers: dict | None = None,
     timeout: int = 10,
     max_attempts: int = _MAX_ATTEMPTS,
     backoff: float = _BACKOFF,
@@ -21,7 +22,7 @@ def fetch_with_retry(
     last_exc: Exception
     for attempt in range(1, max_attempts + 1):
         try:
-            resp = requests.get(url, params=params, timeout=timeout)
+            resp = requests.get(url, params=params, headers=headers, timeout=timeout)
             resp.raise_for_status()
             return resp
         except Exception as exc:
