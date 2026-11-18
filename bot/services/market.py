@@ -193,9 +193,9 @@ def fetch_br_proventos(ticker: str) -> list[dict]:
                 continue
             pay_date = (div.get("paymentDate") or "")[:10] or None
             amount = float(div.get("rate") or 0.0) or None
-            raw_type = (div.get("paymentType") or "").upper()
+            raw_type = (div.get("label") or "").upper()
             ptype = _BR_TYPE_MAP.get(raw_type, raw_type or "Dividend")
-            description = div.get("label") or None
+            description = div.get("remarks") or None
             proventos.append({
                 "ex_date": ex_date,
                 "pay_date": pay_date,
