@@ -19,7 +19,3 @@ DIV_CACHE_TTL:        int = int(os.getenv("DIV_CACHE_TTL_HOURS")           or 24
 FEAR_GREED_CACHE_TTL: int = int(os.getenv("FEAR_GREED_CACHE_TTL_MINUTES") or 30) * 60
 
 BRAPI_TOKEN: str | None = os.getenv("BRAPI_TOKEN") or None
-if not BRAPI_TOKEN:
-    logging.getLogger(__name__).warning(
-        "BRAPI_TOKEN not set — brapi.dev requests (dividends/proventos) will fail with 401"
-    )

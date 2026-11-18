@@ -8,7 +8,7 @@ import discord
 import discord.app_commands as app_commands
 from discord.ext import commands
 
-from bot.config import TIMEZONE, TIMEZONE_NAME
+from bot.config import BRAPI_TOKEN, TIMEZONE, TIMEZONE_NAME
 from bot.db.database import init_db
 from bot.scheduler import scheduler_loop
 
@@ -32,6 +32,11 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 if not DISCORD_TOKEN:
     logger.error("DISCORD_TOKEN environment variable is not set. Exiting.")
     sys.exit(1)
+
+if BRAPI_TOKEN:
+    logger.info("BRAPI_TOKEN configured")
+else:
+    logger.warning("BRAPI_TOKEN not set — brapi.dev requests (dividends/proventos) will fail with 401")
 
 COGS = [
     "bot.commands.ticker",
