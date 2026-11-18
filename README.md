@@ -4,9 +4,9 @@
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Self-hosted](https://img.shields.io/badge/deployment-self--hosted-lightgrey)
 
-> Your personal financial market assistant on Discord. Track stocks, crypto, and ETFs — get price alerts, dividend radars, and daily summaries without leaving your server.
+> Your personal financial market assistant on Discord. Track stocks, crypto, and ETFs — get price alerts and daily summaries without leaving your server.
 
-Supports Brazilian B3 stocks, US equities, ETFs, and cryptocurrencies. Pulls live data from [yfinance](https://github.com/ranaroussi/yfinance) and [brapi.dev](https://brapi.dev), with a local cache to keep responses fast and API calls low.
+Supports Brazilian B3 stocks, US equities, ETFs, and cryptocurrencies. Pulls live data from [yfinance](https://github.com/ranaroussi/yfinance), with a local cache to keep responses fast and API calls low.
 
 **This is a self-hosted bot** — there's no public invite link. You run your own instance (a few minutes with Docker, see below) and it lives on your server only. Each user of that server gets their own isolated tickers, alerts, and schedule.
 
@@ -21,7 +21,6 @@ Supports Brazilian B3 stocks, US equities, ETFs, and cryptocurrencies. Pulls liv
 | **Ceiling prices** | Mark your personal buy target for a ticker and see how far the market is from it at a glance |
 | **Ticker notes** | Attach a free-text note to any ticker — visible in `/tickers` for quick context |
 | **Daily summaries** | Schedule a full market overview delivered to your DMs every day at a time you choose |
-| **Dividend radar** | Upcoming ex-dates, pay-dates, types (Dividendo, JCP, Rendimento), and amounts for the next 60 days |
 | **Market sentiment** | VIX, IBOVESPA, and Bitcoin Fear & Greed Index shown in every summary |
 | **Fear & Greed ceiling/alert** | Set a personal Fear & Greed Index threshold — see it flagged in `/summary`, or get a one-time DM when it's reached |
 | **Performance movers** | Best and worst performers across your portfolio by day, week, and month |
@@ -44,7 +43,7 @@ PETR4   R$38.10    +1.2%  6.54%  —
 VALE3   R$56.40    -0.5%  8.21%  R$60.00 +6%
 ```
 
-**📈 Market Intelligence** — VIX/IBOV/Fear & Greed indicators, best & worst performers by day/week/month, upcoming dividends, and buy opportunities (tickers at or below your ceiling), each as its own field.
+**📈 Market Intelligence** — VIX/IBOV/Fear & Greed indicators, best & worst performers by day/week/month, and buy opportunities (tickers at or below your ceiling), each as its own field.
 
 ---
 
@@ -53,7 +52,7 @@ VALE3   R$56.40    -0.5%  8.21%  R$60.00 +6%
 ```bash
 git clone https://github.com/LeonardoMacedoCano/BullEye-bot.git
 cd BullEye-bot
-cp .env.example .env  # fill in DISCORD_TOKEN and BRAPI_TOKEN
+cp .env.example .env  # fill in DISCORD_TOKEN
 docker compose up -d
 ```
 
@@ -63,7 +62,7 @@ Need a bot token, or want to run it without Docker? Full walkthrough (creating t
 
 ## Built with
 
-discord.py · SQLite · [yfinance](https://github.com/ranaroussi/yfinance) · [brapi.dev](https://brapi.dev)
+discord.py · SQLite · [yfinance](https://github.com/ranaroussi/yfinance)
 
 Want to see how it's structured under the hood (architecture, layering, coding conventions)? See **[CLAUDE.md](CLAUDE.md)**.
 

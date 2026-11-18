@@ -6,12 +6,10 @@ import threading
 import time
 from collections import OrderedDict
 
-import requests
 import yfinance as yf
 
-from bot import config
 from bot.shared.context import get_request_id
-from bot.shared.retry import call_with_retry, fetch_with_retry
+from bot.shared.retry import call_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -36,14 +34,6 @@ SUBCATEGORY_LABELS = {
     "stocks": "Stocks",
 }
 
-_BR_TYPE_MAP = {
-    "DIVIDENDO": "Dividend",
-    "JCP": "JCP",
-    "RENDIMENTO": "Income",
-    "SUBSCRICAO": "Subscription",
-}
-
-
 def classify_br_subcategory(ticker: str) -> str:
     symbol = ticker.upper().removesuffix(".SA")
     return "br-fiis" if _B3_FII_PATTERN.match(symbol) else "br-stocks"
@@ -53,15 +43,6 @@ from bot.config import PRICE_CACHE_TTL as _PRICE_CACHE_TTL
 _PRICE_CACHE_MAX = 500
 _price_cache: OrderedDict[str, tuple[dict, float]] = OrderedDict()
 _price_cache_lock = threading.Lock()
-
-
-def ts_to_date(ts) -> str | None:
-    if not ts:
-        return None
-    try:
-        return datetime.date.fromtimestamp(int(ts)).isoformat()
-    except Exception:
-        return None
 
 
 def clear_price_cache_for(tickers: list[str]) -> int:
@@ -165,54 +146,6 @@ def dividends_trailing_12m(ticker: str) -> float:
     except Exception as exc:
         logger.warning("Failed to fetch dividends for %s: %s", ticker, exc)
         return 0.0
-
-
-def fetch_br_proventos(ticker: str) -> list[dict]:
-    """Fetches proventos from brapi.dev. Returns list of dicts; caller handles DB writes."""
-    symbol = ticker.upper().replace(".SA", "")
-    if not config.BRAPI_TOKEN:
-        logger.warning("Skipping brapi proventos fetch for %s: BRAPI_TOKEN not set", symbol)
-        return []
-    try:
-        resp = fetch_with_retry(
-            f"https://brapi.dev/api/quote/{symbol}",
-            params={"modules": "dividendsData"},
-            headers={"Authorization": f"Bearer {config.BRAPI_TOKEN}"},
-            timeout=10,
-        )
-        results = resp.json().get("results", [])
-        if not results:
-            return []
-        proventos = []
-        for div in results[0].get("dividendsData", {}).get("cashDividends", []):
-            ex_date = (div.get("lastDatePrior") or "")[:10]
-            if not ex_date:
-                continue
-            pay_date = (div.get("paymentDate") or "")[:10] or None
-            amount = float(div.get("rate") or 0.0) or None
-            raw_type = (div.get("label") or "").upper()
-            ptype = _BR_TYPE_MAP.get(raw_type, raw_type or "Dividend")
-            description = div.get("remarks") or None
-            proventos.append({
-                "ex_date": ex_date,
-                "pay_date": pay_date,
-                "amount": amount,
-                "type": ptype,
-                "description": description,
-            })
-        return proventos
-    except requests.exceptions.HTTPError as exc:
-        if exc.response is not None and exc.response.status_code == 401:
-            logger.warning(
-                "BRAPI_TOKEN rejected by brapi.dev (401) for %s — check if it's valid or expired",
-                symbol,
-            )
-        else:
-            logger.warning("brapi proventos fetch failed for %s: %s", ticker, exc)
-        return []
-    except Exception as exc:
-        logger.warning("brapi proventos fetch failed for %s: %s", ticker, exc)
-        return []
 
 
 def get_ticker_subcategory(ticker: str) -> str | None:

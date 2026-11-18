@@ -2,7 +2,7 @@
 
 ## Overview
 
-Discord bot for financial market monitoring. Supports Brazilian B3 stocks, crypto, ETFs, and US stocks. Built with discord.py (hybrid commands), SQLite, yfinance, and brapi.dev.
+Discord bot for financial market monitoring. Supports Brazilian B3 stocks, crypto, ETFs, and US stocks. Built with discord.py (hybrid commands), SQLite, and yfinance.
 
 ## Architecture
 
@@ -19,7 +19,6 @@ bot/
 │   ├── note_cmd.py   # note (free-text note per ticker)
 │   ├── schedule_cmd.py # schedule / unschedule (daily summary)
 │   ├── summary.py    # summary — heavy operation, uses semaphore
-│   ├── dividends_cmd.py # dividends — heavy operation, uses semaphore
 │   ├── cache_cmd.py  # refreshcache
 │   ├── help_cmd.py   # help
 │   ├── resetdb_cmd.py # resetdb (dev only, requires ENABLE_RESETDB=1)
@@ -30,21 +29,19 @@ bot/
 │   └── repository.py # All DB access functions
 ├── application/       # Use cases — plain structured data (dicts/lists), no Discord objects
 │   ├── summary_use_case.py   # build_summary
-│   ├── dividends_use_case.py # get_dividends_rows
 │   ├── ticker_use_case.py    # get_ticker_groups
-│   └── market_cache.py       # DY yield / dividend info caching
+│   └── market_cache.py       # BR dividend-yield (DY%) caching
 ├── shared/
 │   ├── formatting.py     # display_name, currency, fmt, ansi_pct, render_table
 │   ├── embeds.py         # EMBED_COLOR / COLOR_UP / COLOR_DOWN, wrap_table_field()
 │   ├── summary_embed.py  # build_portfolio_embed, build_intelligence_embed
-│   ├── dividends_embed.py# dividends_field_value, build_dividends_embed
 │   ├── tickers_embed.py  # build_tickers_embed
 │   ├── help_embed.py     # build_help_embed
 │   ├── context.py        # per-request correlation ID (ContextVar), threaded through logs
 │   ├── retry.py          # fetch_with_retry() — HTTP GET with exponential backoff
 │   └── cache_embed.py    # build_cache_embed
 └── services/
-    ├── market.py     # yfinance + brapi.dev, in-memory price cache
+    ├── market.py     # yfinance, in-memory price cache
     ├── sentiment.py  # VIX, IBOV
     └── fear_greed.py # Fear & Greed index
 ```
@@ -54,10 +51,8 @@ bot/
 ### Language
 **All code, comments, logs, and user-facing strings must be in English.** No Portuguese anywhere in the codebase — not in messages sent to Discord, not in log messages, not in code comments, not in variable names.
 
-The only exceptions are:
-- The DB table `proventos` and its related internal function names (legacy schema, do not rename)
+The only exception is:
 - Brazilian ticker suffixes like `.SA` (these are financial identifiers, not language)
-- Brazilian finance terminology used as proper nouns in data (e.g. "JCP" in dividend type labels from the API)
 
 ### Discord Interactions — Critical Rules
 
@@ -77,7 +72,7 @@ async def example(self, interaction: discord.Interaction) -> None:
 
 ### Response Formatting — Embeds vs Plain Text
 
-Use a `discord.Embed` (built via a `bot/shared/*_embed.py` module) when a command's output is **structured or multi-section data** — tables, multiple categories, or several distinct pieces of information (e.g. `/summary`, `/dividends`, `/help`, `/refreshcache`). Use plain `followup(interaction, text)` for **single-value confirmations and simple status messages** (e.g. `/alert`, `/ceiling`, `/note`, `/schedule`, `/ticker add|remove`) — wrapping a one-line confirmation in an embed adds visual weight without adding information.
+Use a `discord.Embed` (built via a `bot/shared/*_embed.py` module) when a command's output is **structured or multi-section data** — tables, multiple categories, or several distinct pieces of information (e.g. `/summary`, `/help`, `/refreshcache`). Use plain `followup(interaction, text)` for **single-value confirmations and simple status messages** (e.g. `/alert`, `/ceiling`, `/note`, `/schedule`, `/ticker add|remove`) — wrapping a one-line confirmation in an embed adds visual weight without adding information.
 
 Conventions for embed builders:
 - One module per feature in `bot/shared/`, named `<feature>_embed.py`, exporting a `build_<feature>_embed(data) -> discord.Embed | None` function (return `None` when there's nothing to show — the caller falls back to a plain-text message).
@@ -89,8 +84,8 @@ Conventions for embed builders:
 ### Async / Concurrency
 
 - Always use `asyncio.get_running_loop().run_in_executor(None, fn, *args)` for blocking I/O inside coroutines. Never use `asyncio.get_event_loop()` (deprecated in Python 3.10+).
-- Wrap executor calls in `asyncio.wait_for()` for heavy operations (summary: 120s, dividends: 60s).
-- Heavy commands (`summary`, `dividends`) must acquire `bot.heavy_semaphore` (limit: 3 concurrent) before the executor call.
+- Wrap executor calls in `asyncio.wait_for()` for heavy operations (summary: 120s).
+- Heavy commands (`summary`) must acquire `bot.heavy_semaphore` (limit: 3 concurrent) before the executor call.
 
 ### `on_ready()` and Sync
 
@@ -100,7 +95,7 @@ Conventions for embed builders:
 
 - All exceptions inside command handlers must be caught and result in a user-facing message. Never let an error cause a silent no-response.
 - Use `logger.exception()` (not `logger.error()`) when logging caught exceptions so the traceback is included.
-- For external API failures (yfinance, brapi, fear & greed), log at `WARNING` level and return `None` — the caller handles the missing data gracefully.
+- For external API failures (yfinance, fear & greed), log at `WARNING` level and return `None` — the caller handles the missing data gracefully.
 
 ### Caching
 
@@ -108,7 +103,7 @@ Conventions for embed builders:
 |-------|-------------|---------|----------|
 | Price data | 5 min | `PRICE_CACHE_TTL_MINUTES` | In-memory dict + threading.Lock |
 | Fear & Greed | 30 min | `FEAR_GREED_CACHE_TTL_MINUTES` | In-memory dict + threading.Lock |
-| Dividends / proventos | 24 h | `DIV_CACHE_TTL_HOURS` | SQLite `ticker_price_cache` + `proventos` tables |
+| BR dividend yield (DY%) | 24 h | `DIV_CACHE_TTL_HOURS` | SQLite `ticker_price_cache` table |
 
 All caches are on-demand only — no proactive background fetching. To force a refresh, use the `/refreshcache` command.
 
@@ -132,19 +127,18 @@ All caches are on-demand only — no proactive background fetching. To force a r
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DISCORD_TOKEN` | — | Required. Bot token from Discord Developer Portal. |
-| `BRAPI_TOKEN` | — | Required for dividend/proventos data. API token from [brapi.dev](https://brapi.dev/dashboard). |
 | `DATABASE_PATH` | `/data/bot.db` | Path to SQLite file. |
 | `TIMEZONE` | `UTC` | Timezone for scheduled summaries and log timestamps (e.g. `America/Sao_Paulo`). |
 | `ENABLE_RESETDB` | `` | Set to `1` to enable the `!resetdb` dev command. |
 | `PRICE_CACHE_TTL_MINUTES` | `5` | In-memory price data cache duration. Lower = fresher data, more API calls. |
-| `DIV_CACHE_TTL_HOURS` | `24` | SQLite dividend/yield cache duration. |
+| `DIV_CACHE_TTL_HOURS` | `24` | SQLite BR dividend-yield (DY%) cache duration. |
 | `FEAR_GREED_CACHE_TTL_MINUTES` | `30` | In-memory Fear & Greed index cache duration. |
 
 ## Running Locally
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env  # fill in DISCORD_TOKEN and BRAPI_TOKEN
+cp .env.example .env  # fill in DISCORD_TOKEN
 python -m bot.main
 ```
 

@@ -8,7 +8,7 @@ from discord.ext import commands
 from bot.db.repository import get_or_create_user, add_ticker, remove_ticker, list_tickers, get_ticker_category
 from bot.services.market import validate_ticker, normalize_ticker, get_ticker_metadata, SUBCATEGORY_LABELS
 from bot.utils import defer, followup, mention, perf_start, perf_log, ticker_autocomplete
-from bot.application.ticker_use_case import get_ticker_groups
+from bot.application.ticker_use_case import backfill_subcategories, get_ticker_groups
 from bot.shared.tickers_embed import build_tickers_embed
 
 logger = logging.getLogger(__name__)
@@ -132,6 +132,8 @@ class TickerCog(commands.Cog):
                 f"{m} Your ticker list is empty. Use `/add <TICKER>` to add one.",
             )
             return
+
+        rows = await loop.run_in_executor(None, backfill_subcategories, user["id"], rows)
 
         wallet = [row for row in rows if row["category"] == "wallet"]
         watchlist = [row for row in rows if row["category"] == "watchlist"]

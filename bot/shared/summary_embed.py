@@ -5,7 +5,6 @@ import discord
 
 from bot.shared.formatting import ansi_pct, strip_ansi
 from bot.shared.embeds import EMBED_COLOR, COLOR_UP, COLOR_DOWN, wrap_table_field
-from bot.shared.dividends_embed import dividends_field_value
 
 
 def build_portfolio_embed(data: dict) -> discord.Embed | None:
@@ -125,11 +124,10 @@ def build_intelligence_embed(
 ) -> discord.Embed | None:
     market = data.get("market")
     performance = data.get("performance")
-    dividends = data.get("dividends", [])
     opportunities = data.get("opportunities", {})
 
     has_opps = bool(opportunities.get("ticker_opps")) or bool(opportunities.get("fgi_triggered"))
-    has_content = market or performance or dividends or has_opps
+    has_content = market or performance or has_opps
 
     if not has_content:
         return None
@@ -145,13 +143,6 @@ def build_intelligence_embed(
         perf_val = _performance_field_value(performance)
         if perf_val:
             embed.add_field(name="🏆 Best & Worst", value=perf_val, inline=False)
-
-    if dividends:
-        embed.add_field(
-            name="📅 Upcoming Dividends",
-            value=dividends_field_value(dividends),
-            inline=False,
-        )
 
     if has_opps:
         opp_val = _opportunities_field_value(opportunities)
